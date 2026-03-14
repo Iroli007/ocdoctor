@@ -1,5 +1,14 @@
 """Application configuration."""
+import os
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+def _default_database_url() -> str:
+    """Provide a Vercel-safe SQLite default."""
+    if os.getenv("VERCEL"):
+        return "sqlite:////tmp/tcm_study.db"
+    return "sqlite:///./tcm_study.db"
 
 
 class Settings(BaseSettings):
@@ -16,7 +25,7 @@ class Settings(BaseSettings):
     debug: bool = True
 
     # Database
-    database_url: str = "sqlite:///./tcm_study.db"
+    database_url: str = _default_database_url()
 
     # API Keys - 支持系统环境变量或 .env 文件
     openai_api_key: str | None = None

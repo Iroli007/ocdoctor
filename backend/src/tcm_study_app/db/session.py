@@ -4,6 +4,8 @@ from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 from tcm_study_app.config import settings
 
+_is_sqlite = settings.database_url.startswith("sqlite")
+
 
 class Base(DeclarativeBase):
     """Base class for all database models."""
@@ -12,7 +14,9 @@ class Base(DeclarativeBase):
 
 engine = create_engine(
     settings.database_url,
-    connect_args={"check_same_thread": False} if "sqlite" in settings.database_url else {},
+    connect_args={"check_same_thread": False} if _is_sqlite else {},
+    pool_pre_ping=not _is_sqlite,
+    pool_recycle=300 if not _is_sqlite else -1,
     echo=settings.debug,
 )
 
@@ -36,6 +40,8 @@ def init_db() -> None:
         SourceDocument,
         KnowledgeCard,
         FormulaCard,
+        AcupunctureCard,
+        WarmDiseaseCard,
         ComparisonItem,
         Quiz,
         ReviewRecord,

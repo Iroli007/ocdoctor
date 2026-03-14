@@ -4,6 +4,7 @@ from datetime import datetime
 from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from tcm_study_app.core.subjects import get_subject_definition
 from tcm_study_app.db.session import Base
 
 
@@ -36,3 +37,13 @@ class StudyCollection(Base):
     quizzes: Mapped[list["Quiz"]] = relationship(
         "Quiz", back_populates="collection", cascade="all, delete-orphan"
     )
+
+    @property
+    def subject_key(self) -> str:
+        """Return the normalized subject key for API consumers."""
+        return get_subject_definition(self.subject).key
+
+    @property
+    def subject_display_name(self) -> str:
+        """Return the display name for the stored subject."""
+        return get_subject_definition(self.subject).display_name

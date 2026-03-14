@@ -2,7 +2,7 @@
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class FormulaCardData(BaseModel):
@@ -15,6 +15,28 @@ class FormulaCardData(BaseModel):
     pathogenesis: str | None = None
     usage_notes: str | None = None
     memory_tip: str | None = None
+
+
+class AcupunctureCardData(BaseModel):
+    """Acupuncture card data schema."""
+
+    acupoint_name: str
+    meridian: str | None = None
+    location: str | None = None
+    indication: str | None = None
+    technique: str | None = None
+    caution: str | None = None
+
+
+class WarmDiseaseCardData(BaseModel):
+    """Warm disease card data schema."""
+
+    pattern_name: str
+    stage: str | None = None
+    syndrome: str | None = None
+    treatment: str | None = None
+    formula: str | None = None
+    differentiation: str | None = None
 
 
 class KnowledgeCardCreate(BaseModel):
@@ -31,15 +53,20 @@ class KnowledgeCardCreate(BaseModel):
 class KnowledgeCardResponse(BaseModel):
     """Response schema for knowledge card."""
 
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     title: str
+    subject: str
+    subject_key: str
+    subject_display_name: str
     category: str
     raw_excerpt: str | None = None
+    normalized_content: dict[str, Any] | None = None
     formula_card: FormulaCardData | None = None
+    acupuncture_card: AcupunctureCardData | None = None
+    warm_disease_card: WarmDiseaseCardData | None = None
     created_at: datetime
-
-    class Config:
-        from_attributes = True
 
 
 class GenerateCardsRequest(BaseModel):
@@ -53,3 +80,11 @@ class GenerateCardsResponse(BaseModel):
 
     cards: list[KnowledgeCardResponse]
     status: str
+
+
+class SubjectResponse(BaseModel):
+    """Response schema for supported subjects."""
+
+    key: str
+    display_name: str
+    entity_label: str

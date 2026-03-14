@@ -13,6 +13,7 @@ dependencies = [
     "alembic>=1.13.0",
     "python-multipart>=0.0.9",
     "pillow>=10.0.0",
+    "psycopg2-binary>=2.9.0",
 ]
 
 [dependency-groups]
@@ -43,7 +44,7 @@ ignore = ["E501"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
-testpaths = ["tests"]
+testpaths = ["backend/src/tcm_study_app/tests"]
 
 [build-system]
 requires = ["hatchling"]

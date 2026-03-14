@@ -77,24 +77,89 @@ class LLMService:
         # Fallback to mock
         return self._mock_extract_formula(text)
 
+    def extract_acupuncture_card(self, text: str) -> dict[str, Any]:
+        """Extract acupuncture card data from raw text."""
+        system_prompt = """你是一个中医针灸学助手。请从文本中提取穴位信息，返回纯JSON格式。"""
+
+        user_prompt = f"""从以下文本中提取针灸学卡片信息：
+
+{text}
+
+请返回以下格式的JSON（只返回JSON，不要其他内容）：
+{{
+  "acupoint_name": "穴位名称",
+  "meridian": "所属经络",
+  "location": "定位",
+  "indication": "主治",
+  "technique": "刺灸法",
+  "caution": "禁忌或注意事项(如果没有则null)"
+}}"""
+
+        if self.anthropic_api_key:
+            try:
+                result = self._call_anthropic(system_prompt, user_prompt)
+                json_match = re.search(r"\{.*\}", result, re.DOTALL)
+                if json_match:
+                    return json.loads(json_match.group())
+            except Exception as e:
+                print(f"Anthropic API error: {e}")
+
+        return self._mock_extract_acupuncture(text)
+
+    def extract_warm_disease_card(self, text: str) -> dict[str, Any]:
+        """Extract warm disease card data from raw text."""
+        system_prompt = """你是一个温病学助手。请从文本中提取证候信息，返回纯JSON格式。"""
+
+        user_prompt = f"""从以下文本中提取温病学卡片信息：
+
+{text}
+
+请返回以下格式的JSON（只返回JSON，不要其他内容）：
+{{
+  "pattern_name": "证候名称",
+  "stage": "卫气营血或三焦阶段",
+  "syndrome": "证候表现",
+  "treatment": "治法",
+  "formula": "方药",
+  "differentiation": "鉴别要点(如果没有则null)"
+}}"""
+
+        if self.anthropic_api_key:
+            try:
+                result = self._call_anthropic(system_prompt, user_prompt)
+                json_match = re.search(r"\{.*\}", result, re.DOTALL)
+                if json_match:
+                    return json.loads(json_match.group())
+            except Exception as e:
+                print(f"Anthropic API error: {e}")
+
+        return self._mock_extract_warm_disease(text)
+
     def generate_comparison(
-        self, left_entity: str, right_entity: str, context: str | None = None
+        self,
+        left_entity: str,
+        right_entity: str,
+        context: str | None = None,
+        subject_name: str = "方剂学",
+        entity_label: str = "方剂",
     ) -> dict[str, Any]:
         """Generate comparison between two entities."""
-        system_prompt = """你是一个中医助手。请比较两个方剂的异同，返回纯JSON格式。"""
+        system_prompt = (
+            "你是一个中医助手。请比较两个同学科知识点的异同，返回纯JSON格式。"
+        )
 
-        user_prompt = f"""请比较以下两个方剂的异同：
+        user_prompt = f"""请比较以下两个{subject_name}{entity_label}的异同：
 
-左方剂：{left_entity}
-右方剂：{right_entity}
+左{entity_label}：{left_entity}
+右{entity_label}：{right_entity}
 {f"上下文：{context}" if context else ""}
 
 请返回以下格式的JSON：
 {{
-  "left_entity": "左方剂名称",
-  "right_entity": "右方剂名称",
+  "left_entity": "左侧{entity_label}名称",
+  "right_entity": "右侧{entity_label}名称",
   "comparison_points": [
-    {{"dimension": "比较维度", "left": "左方剂特点", "right": "右方剂特点"}}
+    {{"dimension": "比较维度", "left": "左侧特点", "right": "右侧特点"}}
   ],
   "question_text": "比较题问题",
   "answer_text": "比较题答案"
@@ -109,15 +174,19 @@ class LLMService:
             except Exception as e:
                 print(f"Anthropic API error: {e}")
 
-        return self._mock_generate_comparison(left_entity, right_entity)
+        return self._mock_generate_comparison(left_entity, right_entity, entity_label)
 
     def generate_quiz(
-        self, card_content: dict[str, Any], difficulty: str = "medium"
+        self,
+        card_content: dict[str, Any],
+        difficulty: str = "medium",
+        subject_name: str = "方剂学",
+        entity_label: str = "方剂",
     ) -> dict[str, Any]:
         """Generate quiz question from card content."""
         system_prompt = """你是一个中医助手。请根据知识卡片生成测试题，返回纯JSON格式。"""
 
-        user_prompt = f"""根据以下知识卡片生成一道测试题：
+        user_prompt = f"""根据以下{subject_name}{entity_label}知识卡片生成一道测试题：
 
 {json.dumps(card_content, ensure_ascii=False)}
 
@@ -141,12 +210,12 @@ class LLMService:
             except Exception as e:
                 print(f"Anthropic API error: {e}")
 
-        return self._mock_generate_quiz(card_content, difficulty)
+        return self._mock_generate_quiz(card_content, difficulty, entity_label)
 
     def _mock_extract_formula(self, text: str) -> dict[str, Any]:
         """Mock extraction for MVP."""
         # Try to extract formula name from text
-        name_match = re.search(r"([\u4e00-\u9fa5]+方)", text)
+        name_match = re.search(r"([\u4e00-\u9fa5]{2,20}(?:汤|散|饮|丸|剂|方))", text)
         formula_name = name_match.group(1) if name_match else "未知方剂"
 
         # Try to extract composition
@@ -171,8 +240,50 @@ class LLMService:
             "memory_tip": None,
         }
 
+    def _mock_extract_acupuncture(self, text: str) -> dict[str, Any]:
+        """Mock acupuncture extraction for MVP."""
+        name_match = re.search(r"([\u4e00-\u9fa5]{1,6}(?:穴|俞|募))", text)
+        meridian_match = re.search(r"(?:经络|归经|所属经脉)[：:]\s*([^\n。；;]+)", text)
+        location_match = re.search(r"(?:定位)[：:]\s*([^\n]+)", text)
+        indication_match = re.search(r"(?:主治)[：:]\s*([^\n]+)", text)
+        technique_match = re.search(r"(?:刺灸法|操作)[：:]\s*([^\n]+)", text)
+        caution_match = re.search(r"(?:禁忌|注意)[：:]\s*([^\n]+)", text)
+
+        return {
+            "acupoint_name": name_match.group(1) if name_match else "未知穴位",
+            "meridian": meridian_match.group(1) if meridian_match else None,
+            "location": location_match.group(1) if location_match else None,
+            "indication": indication_match.group(1) if indication_match else None,
+            "technique": technique_match.group(1) if technique_match else None,
+            "caution": caution_match.group(1) if caution_match else None,
+        }
+
+    def _mock_extract_warm_disease(self, text: str) -> dict[str, Any]:
+        """Mock warm disease extraction for MVP."""
+        name_match = re.search(r"([\u4e00-\u9fa5]{2,12}(?:证|证候|病))", text)
+        stage_match = re.search(
+            r"(卫分|气分|营分|血分|上焦|中焦|下焦)",
+            text,
+        )
+        syndrome_match = re.search(r"(?:证候|表现)[：:]\s*([^\n]+)", text)
+        treatment_match = re.search(r"(?:治法)[：:]\s*([^\n]+)", text)
+        formula_match = re.search(r"(?:方药|代表方)[：:]\s*([^\n]+)", text)
+        diff_match = re.search(r"(?:鉴别|辨证要点)[：:]\s*([^\n]+)", text)
+
+        return {
+            "pattern_name": name_match.group(1) if name_match else "未知证候",
+            "stage": stage_match.group(1) if stage_match else None,
+            "syndrome": syndrome_match.group(1) if syndrome_match else None,
+            "treatment": treatment_match.group(1) if treatment_match else None,
+            "formula": formula_match.group(1) if formula_match else None,
+            "differentiation": diff_match.group(1) if diff_match else None,
+        }
+
     def _mock_generate_comparison(
-        self, left: str, right: str
+        self,
+        left: str,
+        right: str,
+        entity_label: str,
     ) -> dict[str, Any]:
         """Mock comparison for MVP."""
         return {
@@ -182,25 +293,29 @@ class LLMService:
                 {"dimension": "共同点", "left": "同属解表剂", "right": "同属解表剂"},
                 {"dimension": "表证类型", "left": "表虚证", "right": "表实证"},
             ],
-            "question_text": f"请比较{left}与{right}的异同",
-            "answer_text": f"{left}主治表虚证，{right}主治表实证...",
+            "question_text": f"请比较{left}与{right}两个{entity_label}的异同",
+            "answer_text": f"{left}与{right}在适应场景、核心特点和辨析要点上各有差异。",
         }
 
     def _mock_generate_quiz(
-        self, card: dict[str, Any], difficulty: str
+        self,
+        card: dict[str, Any],
+        difficulty: str,
+        entity_label: str,
     ) -> dict[str, Any]:
         """Mock quiz generation for MVP."""
+        title = card.get("formula_name") or card.get("acupoint_name") or card.get("pattern_name") or "该知识点"
         return {
             "type": "choice",
-            "question": f"以下哪项是{card.get('formula_name', '该方剂')}的组成？",
+            "question": f"以下哪项最符合{title}这个{entity_label}的核心信息？",
             "options": [
-                {"key": "A", "value": "桂枝、芍药、生姜、大枣、甘草"},
-                {"key": "B", "value": "麻黄、桂枝、杏仁、甘草"},
-                {"key": "C", "value": "人参、白术、茯苓、甘草"},
-                {"key": "D", "value": "以上都不是"},
+                {"key": "A", "value": "请结合原文继续补充结构化要点"},
+                {"key": "B", "value": "只记标题，不看适应证"},
+                {"key": "C", "value": "忽略主题差异，统一按方剂学处理"},
+                {"key": "D", "value": "完全不需要复习"},
             ],
             "answer": "A",
-            "explanation": f"{card.get('formula_name', '该方剂')}的组成是...",
+            "explanation": f"{title}的测试题应围绕其结构化字段来复习。",
         }
 
 

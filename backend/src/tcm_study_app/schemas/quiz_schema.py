@@ -1,7 +1,6 @@
 """Quiz schemas."""
-from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class ComparisonPoint(BaseModel):
@@ -23,15 +22,14 @@ class GenerateComparisonRequest(BaseModel):
 class ComparisonItemResponse(BaseModel):
     """Response schema for comparison item."""
 
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     left_entity: str
     right_entity: str
     comparison_points: list[ComparisonPoint]
     question_text: str | None = None
     answer_text: str | None = None
-
-    class Config:
-        from_attributes = True
 
 
 class QuizOption(BaseModel):
@@ -52,11 +50,10 @@ class GenerateQuizRequest(BaseModel):
 class QuizResponse(BaseModel):
     """Response schema for quiz."""
 
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     type: str
     question: str
     options: list[QuizOption] | None = None
     difficulty: str
-
-    class Config:
-        from_attributes = True

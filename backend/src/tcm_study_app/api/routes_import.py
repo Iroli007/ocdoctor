@@ -1,13 +1,13 @@
 """Import routes."""
-from fastapi import APIRouter, Depends, UploadFile, File
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
 from tcm_study_app.db import get_db
 from tcm_study_app.models import SourceDocument, StudyCollection
 from tcm_study_app.schemas import (
+    ImportImageResponse,
     ImportTextRequest,
     ImportTextResponse,
-    ImportImageResponse,
     OCRResultRequest,
 )
 from tcm_study_app.services import ocr_service
@@ -21,7 +21,10 @@ async def import_text(request: ImportTextRequest, db: Session = Depends(get_db))
     # Verify collection exists
     collection = db.get(StudyCollection, request.collection_id)
     if not collection:
-        raise ValueError(f"Collection {request.collection_id} not found")
+        raise HTTPException(
+            status_code=404,
+            detail=f"Collection {request.collection_id} not found",
+        )
 
     # Create source document
     doc = SourceDocument(
@@ -47,7 +50,7 @@ async def import_image(
     # Verify collection exists
     collection = db.get(StudyCollection, collection_id)
     if not collection:
-        raise ValueError(f"Collection {collection_id} not found")
+        raise HTTPException(status_code=404, detail=f"Collection {collection_id} not found")
 
     # For MVP, just save the file reference
     # TODO: Actually save the file and run OCR
@@ -83,7 +86,7 @@ async def correct_ocr(request: OCRResultRequest, db: Session = Depends(get_db)):
     """Submit corrected OCR text."""
     doc = db.get(SourceDocument, request.document_id)
     if not doc:
-        raise ValueError(f"Document {request.document_id} not found")
+        raise HTTPException(status_code=404, detail=f"Document {request.document_id} not found")
 
     doc.ocr_text = request.corrected_text
     db.commit()

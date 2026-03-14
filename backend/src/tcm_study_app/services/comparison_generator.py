@@ -3,6 +3,7 @@ import json
 
 from sqlalchemy.orm import Session
 
+from tcm_study_app.core import get_subject_definition
 from tcm_study_app.models import ComparisonItem, StudyCollection
 from tcm_study_app.services.llm_service import llm_service
 
@@ -32,6 +33,10 @@ class ComparisonGenerator:
         """
         # Get context from existing cards
         collection = self.db.get(StudyCollection, collection_id)
+        if not collection:
+            raise ValueError(f"Collection {collection_id} not found")
+
+        subject = get_subject_definition(collection.subject)
         context = None
         if collection and collection.knowledge_cards:
             cards_text = "\n".join(
@@ -44,7 +49,11 @@ class ComparisonGenerator:
 
         # Generate comparison using LLM
         comparison_data = llm_service.generate_comparison(
-            left_entity, right_entity, context
+            left_entity,
+            right_entity,
+            context=context,
+            subject_name=subject.display_name,
+            entity_label=subject.entity_label,
         )
 
         # Create comparison item

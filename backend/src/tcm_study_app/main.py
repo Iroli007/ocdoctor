@@ -1,26 +1,25 @@
 """TCM Study App - Main application entry point."""
-import sys
+from contextlib import asynccontextmanager
 from pathlib import Path
 
-# Add backend/src to path
-backend_path = Path(__file__).parent / "backend" / "src"
-if str(backend_path) not in sys.path:
-    sys.path.insert(0, str(backend_path))
-
-from contextlib import asynccontextmanager
-
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
 from tcm_study_app.api import (
     cards_router,
+    collections_router,
     health_router,
     import_router,
     quiz_router,
     review_router,
+    subjects_router,
 )
 from tcm_study_app.config import settings
 from tcm_study_app.db import init_db
+
+FRONTEND_DIR = Path(__file__).resolve().parents[3] / "frontend"
 
 
 @asynccontextmanager
@@ -36,7 +35,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title=settings.app_name,
-    description="TCM Study Helper for formula learning and card generation",
+    description="TCM Study Helper for formula, acupuncture, and warm-disease learning",
     version="0.1.0",
     lifespan=lifespan,
 )
@@ -52,18 +51,26 @@ app.add_middleware(
 
 # Include routers
 app.include_router(health_router)
+app.include_router(subjects_router)
+app.include_router(collections_router)
 app.include_router(import_router)
 app.include_router(cards_router)
 app.include_router(quiz_router)
 app.include_router(review_router)
 
+app.mount("/assets", StaticFiles(directory=FRONTEND_DIR / "assets"), name="assets")
 
-@app.get("/")
-async def root():
-    """Root endpoint."""
+
+@app.get("/", include_in_schema=False)
+async def root(request: Request):
+    """Serve the frontend for browsers and JSON for API clients."""
+    if "text/html" in request.headers.get("accept", ""):
+        return FileResponse(FRONTEND_DIR / "index.html")
+
     return {
         "message": "Welcome to TCM Study App",
         "docs": "/docs",
+        "app": "/",
     }
 
 

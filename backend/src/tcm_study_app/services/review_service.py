@@ -1,10 +1,10 @@
 """Review service."""
-from datetime import datetime, timedelta
+from datetime import datetime
 
-from sqlalchemy import func
+from sqlalchemy import case, func
 from sqlalchemy.orm import Session
 
-from tcm_study_app.models import KnowledgeCard, Quiz, ReviewRecord, StudyCollection
+from tcm_study_app.models import KnowledgeCard, ReviewRecord, StudyCollection
 
 
 class ReviewService:
@@ -52,23 +52,15 @@ class ReviewService:
         stats = (
             self.db.query(
                 func.count(ReviewRecord.id).label("total"),
-                func.sum(
-                    func.case(
-                        (ReviewRecord.result == "correct", 1), else_=0
-                    )
-                ).label("correct"),
-                func.sum(
-                    func.case(
-                        (ReviewRecord.result == "wrong", 1), else_=0
-                    )
-                ).label("wrong"),
-                func.sum(
-                    func.sum(
-                        func.case(
-                            (ReviewRecord.result == "skipped", 1), else_=0
-                        )
-                    )
-                ).label("skipped"),
+                func.sum(case((ReviewRecord.result == "correct", 1), else_=0)).label(
+                    "correct"
+                ),
+                func.sum(case((ReviewRecord.result == "wrong", 1), else_=0)).label(
+                    "wrong"
+                ),
+                func.sum(case((ReviewRecord.result == "skipped", 1), else_=0)).label(
+                    "skipped"
+                ),
             )
             .filter(ReviewRecord.user_id == user_id)
             .first()

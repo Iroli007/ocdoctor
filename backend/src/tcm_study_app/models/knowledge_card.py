@@ -40,3 +40,9 @@ class KnowledgeCard(Base):
     formula_card: Mapped["FormulaCard"] = relationship(
         "FormulaCard", back_populates="knowledge_card", uselist=False
     )
+    acupuncture_card: Mapped["AcupunctureCard"] = relationship(
+        "AcupunctureCard", back_populates="knowledge_card", uselist=False
+    )
+    warm_disease_card: Mapped["WarmDiseaseCard"] = relationship(
+        "WarmDiseaseCard", back_populates="knowledge_card", uselist=False
+    )

@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>OCDoctor · 中医学习台</title>
+    <link rel="stylesheet" href="/assets/styles.css" />
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="hero">
+        <div>
+          <p class="eyebrow">OCDoctor</p>
+          <h1>一个后端，多学科扩展</h1>
+          <p class="hero-copy">
+            现在先把方剂学主流程跑顺，同时为针灸学和温病学预留清晰扩展位。
+          </p>
+        </div>
+        <div class="hero-card">
+          <div class="hero-stat">
+            <span id="collection-count">0</span>
+            <small>学习集合</small>
+          </div>
+          <div class="hero-stat">
+            <span id="card-count">0</span>
+            <small>知识卡片</small>
+          </div>
+          <div class="hero-stat">
+            <span id="quiz-count">0</span>
+            <small>测试题</small>
+          </div>
+        </div>
+      </header>
+
+      <main class="dashboard">
+        <section class="panel panel-form">
+          <div class="section-heading">
+            <h2>1. 创建学习集合</h2>
+            <p>先选学科，再给集合一个明确主题。</p>
+          </div>
+          <form id="collection-form" class="stack">
+            <label>
+              <span>集合名称</span>
+              <input
+                name="title"
+                type="text"
+                placeholder="例如：方剂学·解表剂"
+                required
+              />
+            </label>
+            <label>
+              <span>学科</span>
+              <select name="subject" id="subject-select"></select>
+            </label>
+            <label>
+              <span>备注</span>
+              <textarea
+                name="description"
+                rows="3"
+                placeholder="可写教材章节、老师重点、考试范围"
+              ></textarea>
+            </label>
+            <button type="submit">创建集合</button>
+          </form>
+        </section>
+
+        <section class="panel panel-form">
+          <div class="section-heading">
+            <h2>2. 导入内容并生成卡片</h2>
+            <p>现在优先支持文本导入；图片 OCR 也可以作为后续入口。</p>
+          </div>
+          <form id="import-form" class="stack">
+            <label>
+              <span>目标集合</span>
+              <select name="collection_id" id="collection-select"></select>
+            </label>
+            <label>
+              <span>教材/笔记内容</span>
+              <textarea
+                name="text"
+                rows="8"
+                placeholder="例如：桂枝汤。组成：桂枝、芍药、生姜、大枣、甘草。功效：解肌发表，调和营卫。主治：外感风寒表虚证。"
+                required
+              ></textarea>
+            </label>
+            <div class="button-row">
+              <button type="submit">导入文本并生成卡片</button>
+              <button type="button" id="refresh-button" class="button-ghost">
+                刷新当前集合
+              </button>
+            </div>
+          </form>
+        </section>
+
+        <section class="panel panel-form">
+          <div class="section-heading">
+            <h2>3. 生成小测</h2>
+            <p>题目会跟随集合所属学科走，不再默认只按方剂学提问。</p>
+          </div>
+          <form id="quiz-form" class="stack inline-form">
+            <label>
+              <span>集合</span>
+              <select name="collection_id" id="quiz-collection-select"></select>
+            </label>
+            <label>
+              <span>数量</span>
+              <input name="count" type="number" min="1" max="10" value="3" />
+            </label>
+            <label>
+              <span>难度</span>
+              <select name="difficulty">
+                <option value="easy">easy</option>
+                <option value="medium" selected>medium</option>
+                <option value="hard">hard</option>
+              </select>
+            </label>
+            <button type="submit">生成题目</button>
+          </form>
+        </section>
+
+        <section class="panel panel-feed">
+          <div class="section-heading">
+            <h2>学习集合</h2>
+            <p>点击任意集合，右侧会刷新卡片与题目。</p>
+          </div>
+          <div id="collections-list" class="collection-list"></div>
+        </section>
+
+        <section class="panel panel-feed">
+          <div class="section-heading">
+            <h2>知识卡片</h2>
+            <p id="current-collection-hint">还没有选择集合。</p>
+          </div>
+          <div id="cards-list" class="feed-list empty-state">暂无卡片</div>
+        </section>
+
+        <section class="panel panel-feed">
+          <div class="section-heading">
+            <h2>最新小测</h2>
+            <p>适合做一个快速自查。</p>
+          </div>
+          <div id="quizzes-list" class="feed-list empty-state">暂无题目</div>
+        </section>
+      </main>
+    </div>
+
+    <div id="status-bar" class="status-bar">准备就绪</div>
+
+    <script src="/assets/app.js" defer></script>
+  </body>
+</html>

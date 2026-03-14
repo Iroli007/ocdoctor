@@ -4,6 +4,7 @@ import random
 
 from sqlalchemy.orm import Session
 
+from tcm_study_app.core import get_subject_definition
 from tcm_study_app.models import KnowledgeCard, Quiz, StudyCollection
 from tcm_study_app.services.llm_service import llm_service
 
@@ -29,6 +30,11 @@ class QuizGenerator:
             List of generated quizzes
         """
         # Get cards from collection
+        collection = self.db.get(StudyCollection, collection_id)
+        if not collection:
+            raise ValueError(f"Collection {collection_id} not found")
+
+        subject = get_subject_definition(collection.subject)
         cards = (
             self.db.query(KnowledgeCard)
             .filter(KnowledgeCard.collection_id == collection_id)
@@ -55,7 +61,12 @@ class QuizGenerator:
                 card_content = {"formula_name": card.title}
 
             # Generate quiz using LLM
-            quiz_data = llm_service.generate_quiz(card_content, difficulty)
+            quiz_data = llm_service.generate_quiz(
+                card_content,
+                difficulty,
+                subject_name=subject.display_name,
+                entity_label=subject.entity_label,
+            )
 
             # Create quiz
             quiz = Quiz(

@@ -1,17 +1,17 @@
 """Quiz routes."""
 import json
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from tcm_study_app.db import get_db
 from tcm_study_app.schemas import (
-    GenerateComparisonRequest,
-    GenerateQuizRequest,
     ComparisonItemResponse,
     ComparisonPoint,
-    QuizResponse,
+    GenerateComparisonRequest,
+    GenerateQuizRequest,
     QuizOption,
+    QuizResponse,
 )
 from tcm_study_app.services import (
     create_comparison_generator,
@@ -25,11 +25,16 @@ router = APIRouter(prefix="/api", tags=["quiz"])
 async def generate_comparison(request: GenerateComparisonRequest, db: Session = Depends(get_db)):
     """Generate a comparison between two entities."""
     generator = create_comparison_generator(db)
-    comparison = generator.generate_comparison(
-        request.collection_id,
-        request.left_entity,
-        request.right_entity,
-    )
+    try:
+        comparison = generator.generate_comparison(
+            request.collection_id,
+            request.left_entity,
+            request.right_entity,
+        )
+    except ValueError as exc:
+        message = str(exc)
+        status_code = 404 if "not found" in message.lower() else 400
+        raise HTTPException(status_code=status_code, detail=message) from exc
 
     points = []
     if comparison.comparison_points_json:
@@ -94,9 +99,14 @@ async def get_comparisons(
 async def generate_quiz(request: GenerateQuizRequest, db: Session = Depends(get_db)):
     """Generate quiz questions for a collection."""
     generator = create_quiz_generator(db)
-    quizzes = generator.generate_quizzes(
-        request.collection_id, request.count, request.difficulty
-    )
+    try:
+        quizzes = generator.generate_quizzes(
+            request.collection_id, request.count, request.difficulty
+        )
+    except ValueError as exc:
+        message = str(exc)
+        status_code = 404 if "not found" in message.lower() else 400
+        raise HTTPException(status_code=status_code, detail=message) from exc
 
     result = []
     for quiz in quizzes:
