@@ -18,9 +18,11 @@ class Settings(BaseSettings):
     # Database
     database_url: str = "sqlite:///./tcm_study.db"
 
-    # API Keys (optional for MVP)
+    # API Keys - 支持系统环境变量或 .env 文件
     openai_api_key: str | None = None
     anthropic_api_key: str | None = None
+    anthropic_auth_token: str | None = None  # 系统代理使用
+    anthropic_base_url: str = "https://api.anthropic.com"
 
 
 settings = Settings()
