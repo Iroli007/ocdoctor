@@ -8,79 +8,38 @@
   </head>
   <body>
     <div class="app-shell">
-      <aside class="sidebar">
-        <div class="brand">
-          <div class="brand-mark" aria-hidden="true">
-            <svg viewBox="0 0 64 64" role="img">
-              <defs>
-                <linearGradient id="brandGlow" x1="0%" y1="0%" x2="100%" y2="100%">
-                  <stop offset="0%" stop-color="#17305d" />
-                  <stop offset="100%" stop-color="#2f67d8" />
-                </linearGradient>
-              </defs>
-              <rect x="2" y="2" width="60" height="60" rx="20" fill="url(#brandGlow)" />
-              <g fill="none" stroke="#f6efe3" stroke-linecap="round" stroke-linejoin="round">
-                <path stroke-width="3.2" d="M23 21l-5-7m5 7l-8-1m18 1l-3-9m3 9l7-4m1 4l5-7m-5 7l8-1" />
-                <path stroke-width="2.6" d="M28 28c-5 1-9 5-9 11 0 9 7 14 13 14s13-5 13-14c0-6-4-10-9-11" />
-                <path stroke-width="2.6" d="M26 31c2 2 4 3 6 3s4-1 6-3" />
-                <path stroke-width="2.3" d="M26 43c1.5 2 3.7 3 6 3s4.5-1 6-3" />
-                <path stroke-width="2.2" d="M27 39h.01M37 39h.01" />
-              </g>
-            </svg>
-          </div>
-          <div>
-            <p class="eyebrow brand-name">ocdoctor</p>
-          </div>
-        </div>
-
-        <section class="sidebar-section" style="display:none">
-          <div class="section-heading">
-            <h2>文件夹</h2>
-            <p>每个集合就是一个可保存、可导出的知识库目录。</p>
-          </div>
-          <div id="collections-list" class="stack-list empty-state">先创建一个集合。</div>
-        </section>
-
-        <section class="sidebar-section" style="display:none">
-          <div class="section-heading">
-            <h2>新建集合</h2>
-            <p>建议按课程章节、老师范围或一本教材建一个目录。</p>
-          </div>
-          <form id="collection-form" class="stack-form">
-            <label>
-              <span>名称</span>
-              <input
-                name="title"
-                type="text"
-                placeholder="例如：温病学·卫气营血"
-                required
-              />
-            </label>
-            <label>
-              <span>学科</span>
-              <select name="subject" id="subject-select"></select>
-            </label>
-            <label>
-              <span>备注</span>
-              <textarea
-                name="description"
-                rows="3"
-                placeholder="可写教材名、章节、老师要求"
-              ></textarea>
-            </label>
-            <button type="submit">创建集合</button>
-          </form>
-        </section>
-      </aside>
+      <!-- hidden: sidebar elements kept for JS compatibility -->
+      <div style="display:none">
+        <div id="collections-list"></div>
+        <form id="collection-form"><select id="subject-select"></select></form>
+      </div>
 
       <main class="workspace">
         <header class="workspace-header">
           <div>
-            <p class="workspace-kicker">OCDoctor</p>
-            <h2 id="workspace-title">选择一个集合开始导入 PDF</h2>
-            <p id="workspace-subtitle" class="workspace-subtitle">
-              上传文档后，选择模板生成卡片，每张卡片都会带原文引用。
-            </p>
+            <div class="workspace-brand">
+              <svg viewBox="0 0 64 64" role="img" class="workspace-brand-mark" aria-hidden="true">
+                <defs>
+                  <linearGradient id="brandGlow" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stop-color="#17305d" />
+                    <stop offset="100%" stop-color="#2f67d8" />
+                  </linearGradient>
+                </defs>
+                <rect x="2" y="2" width="60" height="60" rx="20" fill="url(#brandGlow)" />
+                <g fill="none" stroke="#f6efe3" stroke-linecap="round" stroke-linejoin="round">
+                  <path stroke-width="3.2" d="M23 21l-5-7m5 7l-8-1m18 1l-3-9m3 9l7-4m1 4l5-7m-5 7l8-1" />
+                  <path stroke-width="2.6" d="M28 28c-5 1-9 5-9 11 0 9 7 14 13 14s13-5 13-14c0-6-4-10-9-11" />
+                  <path stroke-width="2.6" d="M26 31c2 2 4 3 6 3s4-1 6-3" />
+                  <path stroke-width="2.3" d="M26 43c1.5 2 3.7 3 6 3s4.5-1 6-3" />
+                  <path stroke-width="2.2" d="M27 39h.01M37 39h.01" />
+                </g>
+              </svg>
+              <span class="workspace-brand-name">OCDOCTOR</span>
+            </div>
+            <div class="workspace-title-row">
+              <h2 id="workspace-title">选择一个集合</h2>
+              <select id="collection-switcher" class="collection-switcher"></select>
+            </div>
           </div>
           <div class="workspace-stats">
             <div class="stat-card">

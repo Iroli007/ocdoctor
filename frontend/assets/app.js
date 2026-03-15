@@ -75,24 +75,42 @@ function setButtonBusy(button, isBusy, busyLabel) {
 
 function syncCollectionSelects() {
   const uploadSelect = document.getElementById("upload-collection-select");
-  if (!uploadSelect) {
-    return;
-  }
-
+  const switcher = document.getElementById("collection-switcher");
   const current = String(state.activeCollectionId || "");
-  uploadSelect.innerHTML = state.collections.length
+
+  const optionsHtml = state.collections.length
     ? state.collections
         .map(
           (collection) => `
             <option value="${collection.id}" ${
               String(collection.id) === current ? "selected" : ""
             }>
-              ${escapeHtml(collection.title)} · ${escapeHtml(collection.subject_display_name)}
+              ${escapeHtml(collection.title)}
             </option>
           `,
         )
         .join("")
-    : '<option value="">请先创建集合</option>';
+    : '<option value="">暂无集合</option>';
+
+  if (uploadSelect) {
+    uploadSelect.innerHTML = state.collections.length
+      ? state.collections
+          .map(
+            (collection) => `
+              <option value="${collection.id}" ${
+                String(collection.id) === current ? "selected" : ""
+              }>
+                ${escapeHtml(collection.title)} · ${escapeHtml(collection.subject_display_name)}
+              </option>
+            `,
+          )
+          .join("")
+      : '<option value="">请先创建集合</option>';
+  }
+
+  if (switcher) {
+    switcher.innerHTML = optionsHtml;
+  }
 }
 
 function getActiveCollection() {
@@ -173,10 +191,7 @@ function renderWorkspaceHeader() {
   const active = getActiveCollection();
   document.getElementById("workspace-title").textContent = active
     ? active.title
-    : "选择一个集合开始导入 PDF";
-  document.getElementById("workspace-subtitle").textContent = active
-    ? `${active.subject_display_name} · ${active.description || "上传文档后，选择模板生成卡片。"}`
-    : "上传文档后，选择模板生成卡片，每张卡片都会带原文引用。";
+    : "选择一个集合";
   document.getElementById("document-count").textContent = state.documents.length;
   document.getElementById("card-count").textContent = state.cards.length;
 }
@@ -591,6 +606,16 @@ async function bootstrap() {
     document.getElementById("upload-form").addEventListener("submit", uploadPdf);
     document.getElementById("generate-button").addEventListener("click", generateCards);
     document.getElementById("export-button").addEventListener("click", exportCollection);
+    document.getElementById("collection-switcher").addEventListener("change", async (event) => {
+      const id = Number(event.target.value);
+      if (id) {
+        state.activeCollectionId = id;
+        state.activeDocumentId = null;
+        state.activeCardId = null;
+        syncCollectionSelects();
+        await refreshWorkspace();
+      }
+    });
     setStatus("准备就绪，可以开始导入 PDF。");
   } catch (error) {
     setStatus(`初始化失败：${error.message}`);
