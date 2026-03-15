@@ -65,14 +65,32 @@ textarea {
 }
 
 .collection-switcher {
-  padding: 7px 12px;
+  appearance: none;
+  -webkit-appearance: none;
+  padding: 10px 36px 10px 16px;
   border: 1px solid var(--line);
-  border-radius: 999px;
-  background: var(--panel);
-  color: var(--ink);
-  font-size: 0.85rem;
+  border-radius: 14px;
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='%2366707f'%3E%3Cpath d='M4 6l4 4 4-4'/%3E%3C/svg%3E")
+    no-repeat right 12px center / 16px,
+    var(--accent-soft);
+  color: var(--accent);
+  font-size: 0.95rem;
+  font-weight: 500;
   cursor: pointer;
   min-width: 0;
+  transition: border-color 140ms ease, box-shadow 140ms ease;
+}
+
+.collection-switcher:hover {
+  border-color: rgba(31, 111, 235, 0.3);
+  box-shadow: 0 2px 8px rgba(31, 111, 235, 0.1);
+}
+
+.collection-switcher:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(31, 111, 235, 0.12);
 }
 
 .eyebrow,
