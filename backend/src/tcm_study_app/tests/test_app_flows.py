@@ -107,7 +107,7 @@ def test_root_serves_html_for_browser_requests(client):
     response = client.get("/", headers={"accept": "text/html"})
     assert response.status_code == 200
     assert "text/html" in response.headers["content-type"]
-    assert "期末冲刺训练台" in response.text
+    assert "知识卡片 · 集合 · 小测 · 期末卷" in response.text
 
 
 def test_collection_delete_removes_collection(client):

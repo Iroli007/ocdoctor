@@ -220,13 +220,16 @@ class QuizGenerator:
             if skip_existing and question in existing_questions:
                 continue
 
+            stored_answer = self._storage_answer(payload)
+            stored_explanation = self._storage_explanation(payload)
+
             quiz = Quiz(
                 collection_id=collection_id,
                 type=payload.get("type", "choice"),
                 question=question,
                 options_json=self._serialize_options(payload.get("options")),
-                answer=payload.get("answer") or "",
-                explanation=payload.get("explanation"),
+                answer=stored_answer,
+                explanation=stored_explanation,
                 difficulty=difficulty,
             )
             self.db.add(quiz)
@@ -246,6 +249,23 @@ class QuizGenerator:
         if not options:
             return None
         return json.dumps(options, ensure_ascii=False)
+
+    def _storage_answer(self, payload: dict[str, Any]) -> str:
+        """Keep persisted answers compatible with the legacy short answer column."""
+        answer = str(payload.get("answer") or "").strip()
+        if len(answer) <= 10:
+            return answer
+        return "见解析"
+
+    def _storage_explanation(self, payload: dict[str, Any]) -> str | None:
+        """Persist the full long-form answer inside explanation for subjective questions."""
+        explanation = payload.get("explanation")
+        answer = str(payload.get("answer") or "").strip()
+        if len(answer) <= 10:
+            return explanation
+        if explanation:
+            return f"参考答案：{answer}\n\n{explanation}"
+        return f"参考答案：{answer}"
 
     def _load_card_entries(self, collection_id: int) -> list[dict[str, Any]]:
         """Load cards and parsed normalized content."""

@@ -197,3 +197,44 @@ def test_acupuncture_chapter_drill_includes_true_false_section():
         db.close()
         Base.metadata.drop_all(bind=engine)
         engine.dispose()
+
+
+def test_subjective_paper_answers_are_compacted_for_legacy_storage():
+    """Subjective paper answers should avoid overflowing the legacy short answer column."""
+    engine = create_engine(
+        "sqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    testing_session_local = sessionmaker(
+        autocommit=False,
+        autoflush=False,
+        bind=engine,
+        class_=Session,
+    )
+    Base.metadata.create_all(bind=engine)
+
+    db = testing_session_local()
+    try:
+        seed_demo_content(db)
+        collection = (
+            db.query(StudyCollection)
+            .filter(StudyCollection.title == "温病学·辨证样例")
+            .first()
+        )
+        generator = QuizGenerator(db)
+        generator.generate_paper(collection.id, mode="final_mock", difficulty="medium")
+        quizzes = generator.get_quizzes_by_collection(collection.id, limit=20)
+        subjective = [
+            quiz
+            for quiz in quizzes
+            if quiz.type in {"term_explanation", "short_answer", "case_analysis"}
+        ]
+
+        assert subjective
+        assert all(len(quiz.answer) <= 10 for quiz in subjective)
+        assert any("参考答案：" in (quiz.explanation or "") for quiz in subjective)
+    finally:
+        db.close()
+        Base.metadata.drop_all(bind=engine)
+        engine.dispose()
