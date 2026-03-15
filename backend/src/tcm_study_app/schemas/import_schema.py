@@ -1,5 +1,5 @@
 """Import schemas."""
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class ImportTextRequest(BaseModel):
@@ -40,6 +40,21 @@ class ImportPdfResponse(BaseModel):
     status: str
     chunk_count: int
     page_count: int
+
+
+class OCRPageInput(BaseModel):
+    """One OCR-extracted page payload."""
+
+    page_number: int = Field(..., ge=1)
+    text: str = ""
+
+
+class ImportOcrPagesRequest(BaseModel):
+    """Request schema for importing OCR page text from a scanned PDF."""
+
+    collection_id: int
+    file_name: str
+    pages: list[OCRPageInput] = Field(..., min_length=1)
 
 
 class OCRResultRequest(BaseModel):

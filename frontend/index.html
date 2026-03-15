@@ -8,15 +8,9 @@
   </head>
   <body>
     <div class="app-shell">
-      <!-- hidden: sidebar elements kept for JS compatibility -->
-      <div style="display:none">
-        <div id="collections-list"></div>
-        <form id="collection-form"><select id="subject-select"></select></form>
-      </div>
-
       <main class="workspace">
         <header class="workspace-header">
-          <div>
+          <div class="workspace-branding">
             <div class="workspace-brand">
               <img src="/assets/logo.png" alt="OCDoctor" class="workspace-brand-mark" />
             </div>
@@ -25,71 +19,34 @@
               <select id="collection-switcher" class="collection-switcher"></select>
             </div>
           </div>
-          <div class="workspace-stats">
-            <div class="stat-card">
-              <span id="document-count">0</span>
-              <small>文档</small>
-            </div>
-            <div class="stat-card">
-              <span id="card-count">0</span>
-              <small>卡片</small>
-            </div>
-          </div>
         </header>
 
-        <section class="composer">
-          <form id="upload-form" class="upload-form">
-            <div class="upload-copy">
-              <strong>上传 PDF</strong>
-              <p>导入教材、讲义或整理好的笔记 PDF，系统会先建 chunk，再按模板抽卡。</p>
-            </div>
-            <label>
-              <span>目标集合</span>
-              <select id="upload-collection-select" name="collection_id"></select>
-            </label>
-            <label class="file-input">
-              <span>选择 PDF</span>
-              <input id="pdf-input" name="file" type="file" accept="application/pdf" required />
-            </label>
-            <button type="submit">导入文档</button>
-          </form>
-
-          <div class="template-toolbar">
-            <div class="template-copy">
-              <strong>模板</strong>
-              <p>固定模板优先，避免胡编乱造。</p>
-            </div>
-            <div id="template-list" class="template-list"></div>
-            <div class="button-row">
-              <button type="button" id="generate-button">生成卡片</button>
-              <button type="button" id="export-button" class="button-ghost">导出 Markdown</button>
-            </div>
+        <section class="template-toolbar template-toolbar-wide">
+          <div class="template-copy">
+            <strong>模板</strong>
+            <p>只保留固定模板抽卡。点击一次，就随机抽出一张卡片和对应原文。</p>
+          </div>
+          <div id="template-list" class="template-list"></div>
+          <div class="button-row">
+            <button type="button" id="generate-button">随机抽卡</button>
           </div>
         </section>
 
-        <div class="content-grid">
-          <section class="panel">
-            <div class="section-heading">
-              <h2>文档</h2>
-              <p>点击文档后，生成模板化卡片。</p>
-            </div>
-            <div id="documents-list" class="stack-list empty-state">还没有导入文档。</div>
-          </section>
-
-          <section class="panel">
+        <div class="focus-grid">
+          <section class="panel card-focus-panel">
             <div class="section-heading">
               <h2>卡片</h2>
-              <p>生成后的卡片会自动保存到当前集合中。</p>
+              <p>抽卡次数会记录在后台，下次打开仍然保留。</p>
             </div>
-            <div id="cards-list" class="stack-list empty-state">还没有卡片。</div>
+            <div id="cards-list" class="empty-state">还没有卡片。</div>
           </section>
 
           <section class="panel detail-panel">
             <div class="section-heading">
-              <h2>引用细节</h2>
-              <p>查看卡片字段、出处页码和原文摘录。</p>
+              <h2>原文引用</h2>
+              <p>卡片只基于后台已保存的文档和引用片段展示。</p>
             </div>
-            <div id="card-detail" class="empty-state">选择一张卡片查看详情。</div>
+            <div id="card-detail" class="empty-state">点击“随机抽卡”后，这里会显示对应原文。</div>
           </section>
         </div>
       </main>

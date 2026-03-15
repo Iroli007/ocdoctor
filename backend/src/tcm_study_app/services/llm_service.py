@@ -242,16 +242,58 @@ class LLMService:
 
     def _mock_extract_acupuncture(self, text: str) -> dict[str, Any]:
         """Mock acupuncture extraction for MVP."""
-        name_match = re.search(r"^\s*([\u4e00-\u9fa5]{1,8}(?:穴|俞|募)?)", text)
+        compact_text = re.sub(r"\s+", " ", text)
+        name_match = re.search(r"(?:^|[。；;\s])\d+\.\s*([\u4e00-\u9fa5]{1,8})", compact_text)
+        if not name_match:
+            name_match = re.search(
+                r"(?:^|[。；;\s])(?:\d+\.)?\s*([\u4e00-\u9fa5]{1,8})[^()\n]{0,12}\([^)]*[A-Za-z]{1,3}\s*\d+[^)]*\)",
+                compact_text,
+            )
+        if not name_match:
+            name_match = re.search(r"^\s*([\u4e00-\u9fa5]{1,8}(?:穴|俞|募)?)", text)
+
         meridian_match = re.search(r"(?:经络|归经|所属经脉)[：:]\s*([^\n。；;]+)", text)
-        location_match = re.search(r"(?:定位)[：:]\s*([^\n]+)", text)
-        indication_match = re.search(r"(?:主治)[：:]\s*([^\n]+)", text)
-        technique_match = re.search(r"(?:刺灸法|操作)[：:]\s*([^\n]+)", text)
-        caution_match = re.search(r"(?:禁忌|注意)[：:]\s*([^\n]+)", text)
+        if not meridian_match:
+            meridian_match = re.search(
+                r"(手太阴肺经|手阳明大肠经|足阳明胃经|足太阴脾经|手少阴心经|手太阳小肠经|"
+                r"足太阳膀胱经|足少阴肾经|手厥阴心包经|手少阳三焦经|足少阳胆经|足厥阴肝经|"
+                r"督脉|任脉)",
+                compact_text,
+            )
+
+        code_match = re.search(r"\((?:[^)]*,\s*)?([A-Za-z]{1,3})\s*\d+", compact_text)
+        meridian = meridian_match.group(1) if meridian_match else None
+        if not meridian and code_match:
+            meridian = {
+                "LU": "手太阴肺经",
+                "LI": "手阳明大肠经",
+                "ST": "足阳明胃经",
+                "SP": "足太阴脾经",
+                "HT": "手少阴心经",
+                "SI": "手太阳小肠经",
+                "BL": "足太阳膀胱经",
+                "KI": "足少阴肾经",
+                "PC": "手厥阴心包经",
+                "SJ": "手少阳三焦经",
+                "TE": "手少阳三焦经",
+                "GB": "足少阳胆经",
+                "LR": "足厥阴肝经",
+                "GV": "督脉",
+                "DU": "督脉",
+                "CV": "任脉",
+                "RN": "任脉",
+            }.get(code_match.group(1).upper())
+
+        location_match = re.search(r"(?:【定位】|定位[：:])\s*([^\n]+)", text)
+        indication_match = re.search(r"(?:【主治】|主治[：:])\s*([^\n]+)", text)
+        technique_match = re.search(r"(?:【操作】|刺灸法[：:]|操作[：:])\s*([^\n]+)", text)
+        caution_match = re.search(r"(?:【注意】|禁忌[：:]|注意[：:])\s*([^\n]+)", text)
+        if not caution_match:
+            caution_match = re.search(r"(孕妇[^。；;\n]{0,20}(?:不宜|慎用)[^。；;\n]*)", text)
 
         return {
             "acupoint_name": name_match.group(1) if name_match else "未知穴位",
-            "meridian": meridian_match.group(1) if meridian_match else None,
+            "meridian": meridian,
             "location": location_match.group(1) if location_match else None,
             "indication": indication_match.group(1) if indication_match else None,
             "technique": technique_match.group(1) if technique_match else None,

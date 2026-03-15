@@ -75,8 +75,8 @@ def test_seed_demo_content_preserves_existing_user_data():
         assert seeded_count == 2
         titles = {item.title for item in db.query(StudyCollection).all()}
         assert "我自己的集合" in titles
-        assert "温病学·教材样例" in titles
-        assert "针灸学·教材样例" in titles
+        assert "温病学" in titles
+        assert "针灸学" in titles
     finally:
         db.close()
         Base.metadata.drop_all(bind=engine)

@@ -24,9 +24,11 @@ from tcm_study_app.schemas.document_schema import (
 from tcm_study_app.schemas.import_schema import (
     ImportImageRequest,
     ImportImageResponse,
+    ImportOcrPagesRequest,
     ImportPdfResponse,
     ImportTextRequest,
     ImportTextResponse,
+    OCRPageInput,
     OCRResultRequest,
 )
 from tcm_study_app.schemas.quiz_schema import (
@@ -51,8 +53,10 @@ __all__ = [
     "ImportTextRequest",
     "ImportTextResponse",
     "ImportPdfResponse",
+    "ImportOcrPagesRequest",
     "ImportImageRequest",
     "ImportImageResponse",
+    "OCRPageInput",
     "OCRResultRequest",
     "FormulaCardData",
     "AcupunctureCardData",

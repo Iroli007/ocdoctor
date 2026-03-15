@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from tcm_study_app.models import KnowledgeCard, SourceDocument, StudyCollection
 from tcm_study_app.models.document_chunk import DocumentChunk
+from tcm_study_app.schemas.import_schema import OCRPageInput
 
 
 class DocumentLibrary:
@@ -64,6 +65,37 @@ class DocumentLibrary:
         self.db.refresh(document)
         return document
 
+    def import_ocr_document(
+        self,
+        collection_id: int,
+        filename: str,
+        pages: list[OCRPageInput] | list[dict[str, object]],
+    ) -> SourceDocument:
+        """Import OCR text that was extracted locally from a scanned PDF."""
+        collection = self._require_collection(collection_id)
+        normalized_pages = self._normalize_ocr_pages(pages)
+        if not any(text.strip() for _, text in normalized_pages):
+            raise ValueError("OCR pages are empty")
+
+        raw_text = "\n\n".join(
+            f"[第 {page_number} 页]\n{text}".strip()
+            for page_number, text in normalized_pages
+            if text.strip()
+        )
+        document = SourceDocument(
+            collection_id=collection.id,
+            type="pdf_ocr",
+            raw_text=raw_text,
+            image_url=filename,
+            status="processed",
+        )
+        self.db.add(document)
+        self.db.flush()
+        self._create_chunks_from_page_entries(document, normalized_pages)
+        self.db.commit()
+        self.db.refresh(document)
+        return document
+
     def get_documents(self, collection_id: int) -> list[SourceDocument]:
         """List documents for a collection."""
         self._require_collection(collection_id)
@@ -110,7 +142,18 @@ class DocumentLibrary:
 
     def _create_chunks(self, document: SourceDocument, pages: list[str]) -> None:
         """Create chunk rows from page text."""
-        for page_number, page_text in enumerate(pages, start=1):
+        self._create_chunks_from_page_entries(
+            document,
+            [(page_number, page_text) for page_number, page_text in enumerate(pages, start=1)],
+        )
+
+    def _create_chunks_from_page_entries(
+        self,
+        document: SourceDocument,
+        page_entries: list[tuple[int, str]],
+    ) -> None:
+        """Create chunk rows from explicit page number and text pairs."""
+        for page_number, page_text in page_entries:
             for chunk_index, chunk in enumerate(self._chunk_page_text(page_text), start=1):
                 self.db.add(
                     DocumentChunk(
@@ -121,6 +164,27 @@ class DocumentLibrary:
                         content=chunk["content"],
                     )
                 )
+
+    def _normalize_ocr_pages(
+        self,
+        pages: list[OCRPageInput] | list[dict[str, object]],
+    ) -> list[tuple[int, str]]:
+        """Normalize OCR page payloads into sorted page-number/text tuples."""
+        normalized_pages: list[tuple[int, str]] = []
+        seen_page_numbers: set[int] = set()
+        for entry in pages:
+            if isinstance(entry, OCRPageInput):
+                page_number = entry.page_number
+                text = entry.text
+            else:
+                page_number = int(entry["page_number"])
+                text = str(entry.get("text", ""))
+            if page_number in seen_page_numbers:
+                raise ValueError(f"Duplicate OCR page number: {page_number}")
+            seen_page_numbers.add(page_number)
+            normalized_pages.append((page_number, text.strip()))
+        normalized_pages.sort(key=lambda item: item[0])
+        return normalized_pages
 
     def _chunk_page_text(self, page_text: str) -> list[dict[str, str | None]]:
         """Split one page into readable chunks with an optional heading."""

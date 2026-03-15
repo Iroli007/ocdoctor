@@ -29,7 +29,9 @@ ai = [
     "openai>=1.0.0",
 ]
 ocr = [
+    "paddlepaddle>=3.3.0",
     "paddleocr>=2.7.0",
+    "pymupdf>=1.26.0",
 ]
 server = [
     "gunicorn>=21.0.0",

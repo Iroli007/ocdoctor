@@ -22,6 +22,29 @@ from tcm_study_app.services import create_card_generator
 router = APIRouter(prefix="/api/cards", tags=["cards"])
 
 
+def _load_normalized_content(card: KnowledgeCard) -> tuple[dict | None, str, int]:
+    """Decode card JSON content and extract template metadata plus draw count."""
+    normalized_content = None
+    template_key = card.category
+    draw_count = 0
+
+    if card.normalized_content_json:
+        try:
+            normalized_content = json.loads(card.normalized_content_json)
+            template_key = normalized_content.get("template_key", card.category)
+            draw_count = int(normalized_content.get("draw_count", 0) or 0)
+            normalized_content = {
+                key: value
+                for key, value in normalized_content.items()
+                if key != "draw_count"
+            }
+        except (json.JSONDecodeError, TypeError, ValueError):
+            normalized_content = None
+            draw_count = 0
+
+    return normalized_content, template_key, draw_count
+
+
 def _serialize_card(card: KnowledgeCard) -> KnowledgeCardResponse:
     """Convert a model into the API response shape."""
     formula_data = None
@@ -63,14 +86,7 @@ def _serialize_card(card: KnowledgeCard) -> KnowledgeCardResponse:
         )
 
     subject = get_subject_definition(card.collection.subject if card.collection else None)
-    normalized_content = None
-    template_key = card.category
-    if card.normalized_content_json:
-        try:
-            normalized_content = json.loads(card.normalized_content_json)
-            template_key = normalized_content.get("template_key", card.category)
-        except json.JSONDecodeError:
-            normalized_content = None
+    normalized_content, template_key, draw_count = _load_normalized_content(card)
 
     source_document_name = None
     if card.source_document:
@@ -88,6 +104,7 @@ def _serialize_card(card: KnowledgeCard) -> KnowledgeCardResponse:
         category=card.category,
         source_document_id=card.source_document_id,
         source_document_name=source_document_name,
+        draw_count=draw_count,
         raw_excerpt=card.raw_excerpt,
         normalized_content=normalized_content,
         citations=[
@@ -126,6 +143,25 @@ async def generate_cards(request: GenerateCardsRequest, db: Session = Depends(ge
         cards=[_serialize_card(card) for card in cards],
         status="generated",
     )
+
+
+@router.post("/{card_id}/draw", response_model=KnowledgeCardResponse)
+async def record_card_draw(card_id: int, db: Session = Depends(get_db)):
+    """Record one draw for a card and persist the updated count."""
+    card = db.get(KnowledgeCard, card_id)
+    if not card:
+        raise HTTPException(status_code=404, detail=f"Card {card_id} not found")
+
+    normalized_content, template_key, draw_count = _load_normalized_content(card)
+    payload = normalized_content.copy() if normalized_content else {}
+    payload["template_key"] = template_key
+    payload["draw_count"] = draw_count + 1
+    card.normalized_content_json = json.dumps(payload, ensure_ascii=False)
+
+    db.add(card)
+    db.commit()
+    db.refresh(card)
+    return _serialize_card(card)
 
 
 @router.get("", response_model=list[KnowledgeCardResponse])

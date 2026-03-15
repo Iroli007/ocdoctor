@@ -189,3 +189,28 @@ uv run python scripts/split_pdf.py \
 
 This will emit files like `01_Warm_Disease_Overview.pdf`, `02_Wei-Qi-Ying-Xue.pdf`.
 Use `--dry-run` first if you want to inspect the plan without writing files.
+
+## OCR Scanned PDFs Locally
+
+For scanned textbook PDFs, run OCR locally and upload the extracted page text to the
+hosted app instead of trying to OCR inside a serverless request.
+
+1. The project now defaults to Python 3.13 so local PaddleOCR stays compatible.
+2. Install the optional OCR group:
+
+```bash
+uv sync --group ocr
+```
+
+3. OCR one split PDF or a whole split directory and upload it:
+
+```bash
+uv run --group ocr python scripts/import_scanned_pdf.py \
+  "/path/to/split-pdfs" \
+  --collection-id 12 \
+  --api-base https://iroli1.online
+```
+
+This uses local PaddleOCR for recognition and then sends the page text to
+`POST /api/import/ocr-pages`, so the hosted app only receives plain OCR text and
+can still keep page-aware chunk citations.
