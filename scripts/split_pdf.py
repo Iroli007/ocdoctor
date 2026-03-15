@@ -8,8 +8,6 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "backend" / "src"))
 
-from tcm_study_app.services.pdf_splitter import load_split_parts, split_pdf
-
 
 def build_parser() -> argparse.ArgumentParser:
     """Create the CLI parser."""
@@ -54,6 +52,19 @@ def main() -> int:
     """Run the CLI."""
     parser = build_parser()
     args = parser.parse_args()
+
+    try:
+        from tcm_study_app.pdf_splitter import load_split_parts, split_pdf
+    except ModuleNotFoundError as exc:
+        missing = exc.name or "dependency"
+        parser.exit(
+            1,
+            (
+                f"Missing dependency: {missing}. "
+                "Run this script with `uv run python scripts/split_pdf.py ...` "
+                "after `uv sync`.\n"
+            ),
+        )
 
     parts = load_split_parts(args.spec)
     if args.dry_run:

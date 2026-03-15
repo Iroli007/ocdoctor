@@ -4,7 +4,7 @@ from pathlib import Path
 from pypdf import PdfReader, PdfWriter
 import pytest
 
-from tcm_study_app.services.pdf_splitter import SplitPart, split_pdf
+from tcm_study_app.pdf_splitter import SplitPart, split_pdf
 
 
 def _make_pdf(path: Path, pages: int) -> None:

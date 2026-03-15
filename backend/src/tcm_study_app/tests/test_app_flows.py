@@ -206,4 +206,4 @@ def test_root_serves_html_for_browser_requests(client):
     response = client.get("/", headers={"accept": "text/html"})
     assert response.status_code == 200
     assert "text/html" in response.headers["content-type"]
-    assert "PDF 知识库" in response.text
+    assert "ocdoctor" in response.text.lower()
