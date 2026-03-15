@@ -159,3 +159,33 @@ ANTHROPIC_API_KEY=your_anthropic_key
 ```bash
 pytest
 ```
+
+## Split Large PDFs
+
+When a PDF is too large for the current web upload path, split it by chapter-like
+page ranges first.
+
+1. Create a JSON spec such as:
+
+```json
+{
+  "parts": [
+    { "title": "Warm Disease Overview", "start_page": 1, "end_page": 24 },
+    { "title": "Wei-Qi-Ying-Xue", "start_page": 25, "end_page": 46 },
+    { "title": "Triple Burner Differentiation", "start_page": 47, "end_page": 68 }
+  ]
+}
+```
+
+2. Run:
+
+```bash
+uv run python scripts/split_pdf.py \
+  /path/to/source.pdf \
+  --spec /path/to/split-spec.json \
+  --output-dir /path/to/output \
+  --overlap-pages 1
+```
+
+This will emit files like `01_Warm_Disease_Overview.pdf`, `02_Wei-Qi-Ying-Xue.pdf`.
+Use `--dry-run` first if you want to inspect the plan without writing files.
