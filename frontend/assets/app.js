@@ -1,79 +1,33 @@
 const state = {
-  collections: [],
-  cards: [],
-  quizzes: [],
   subjects: [],
+  collections: [],
+  documents: [],
+  cards: [],
+  templates: [],
   activeCollectionId: null,
-  currentPaper: null,
+  activeDocumentId: null,
+  activeCardId: null,
+  activeTemplateKey: null,
 };
 
 const fieldLabels = {
-  formula_name: "名称",
-  composition: "组成",
-  effect: "功效",
-  indication: "主治",
-  pathogenesis: "病机",
-  usage_notes: "用法",
-  memory_tip: "记忆",
-  acupoint_name: "穴名",
+  acupoint_name: "穴位名称",
   meridian: "经络",
   location: "定位",
-  technique: "操作",
-  caution: "注意",
-  pattern_name: "证候",
+  indication: "主治",
+  technique: "刺灸法",
+  caution: "注意事项",
+  pattern_name: "证候名称",
   stage: "阶段",
-  syndrome: "表现",
+  syndrome: "证候表现",
   treatment: "治法",
   formula: "方药",
-  differentiation: "鉴别",
-};
-
-const modeLabels = {
-  quick_practice: "速练",
-  chapter_drill: "章节训练",
-  final_mock: "期末模拟",
-};
-
-const typeLabels = {
-  choice: "选择题",
-  single_choice: "单选题",
-  true_false: "判断题",
-  term_explanation: "名词解释",
-  short_answer: "简答题",
-  case_analysis: "病例分析",
-};
-
-const studyGuides = {
-  formula: {
-    title: "方剂学答题提醒",
-    tips: [
-      "选择题先抓功效、主治和方义，不要只背药物名称。",
-      "简答题尽量按病机、治法、方义三步写。",
-      "病例题先辨证，再解释为什么选这个方，不要直接报方名。",
-    ],
-  },
-  acupuncture: {
-    title: "针灸学答题提醒",
-    tips: [
-      "单选和判断常考经络归属、定位、特定穴和刺灸法。",
-      "主观题先写取穴结论，再补经络依据、手法和配穴原则。",
-      "病例题建议按辨病、辨经、取穴、手法、加减顺序作答。",
-    ],
-  },
-  warm_disease: {
-    title: "温病学答题提醒",
-    tips: [
-      "选择题重点看卫气营血辨证、三焦辨证和代表方药。",
-      "名词解释不要只写定义，要带上临床表现、治法与方药。",
-      "论述题建议固定写成病因、病机、辨证、治则、方药五步。",
-    ],
-  },
+  differentiation: "辨证要点",
 };
 
 async function api(path, options = {}) {
   const response = await fetch(path, {
     headers: {
-      "Content-Type": "application/json",
       ...(options.headers || {}),
     },
     ...options,
@@ -85,7 +39,7 @@ async function api(path, options = {}) {
       const payload = await response.json();
       detail = payload.detail || detail;
     } catch (error) {
-      // Ignore non-JSON bodies.
+      // Ignore non-JSON error bodies.
     }
     throw new Error(detail);
   }
@@ -106,61 +60,27 @@ function setStatus(message) {
   document.getElementById("status-bar").textContent = message;
 }
 
-function updateCounters() {
-  document.getElementById("collection-count").textContent = state.collections.length;
-  document.getElementById("card-count").textContent = state.cards.length;
-  document.getElementById("quiz-count").textContent = state.quizzes.length;
-}
-
 function setButtonBusy(button, isBusy, busyLabel) {
   if (!button) {
     return;
   }
-
   if (!button.dataset.defaultLabel) {
     button.dataset.defaultLabel = button.textContent;
   }
-
   button.disabled = isBusy;
   button.textContent = isBusy ? busyLabel : button.dataset.defaultLabel;
-}
-
-function upsertCollection(collection) {
-  const existingIndex = state.collections.findIndex((item) => item.id === collection.id);
-  if (existingIndex >= 0) {
-    state.collections[existingIndex] = collection;
-    return;
-  }
-
-  state.collections = [collection, ...state.collections];
 }
 
 function getActiveCollection() {
   return state.collections.find((item) => item.id === state.activeCollectionId) || null;
 }
 
-function syncCollectionSelects() {
-  const selects = [
-    document.getElementById("collection-select"),
-    document.getElementById("paper-collection-select"),
-  ];
+function getActiveCard() {
+  return state.cards.find((item) => item.id === state.activeCardId) || null;
+}
 
-  selects.forEach((select) => {
-    const current = String(state.activeCollectionId || "");
-    select.innerHTML = state.collections.length
-      ? state.collections
-          .map(
-            (collection) => `
-              <option value="${collection.id}" ${
-                String(collection.id) === current ? "selected" : ""
-              }>
-                ${escapeHtml(collection.title)} · ${escapeHtml(collection.subject_display_name)}
-              </option>
-            `,
-          )
-          .join("")
-      : '<option value="">请先创建集合</option>';
-  });
+function getActiveDocument() {
+  return state.documents.find((item) => item.id === state.activeDocumentId) || null;
 }
 
 function renderSubjects() {
@@ -168,64 +88,40 @@ function renderSubjects() {
   select.innerHTML = state.subjects
     .map(
       (subject) => `
-        <option value="${escapeHtml(subject.display_name)}">
-          ${escapeHtml(subject.display_name)} · ${escapeHtml(subject.entity_label)}
-        </option>
+        <option value="${escapeHtml(subject.display_name)}">${escapeHtml(subject.display_name)}</option>
       `,
     )
     .join("");
 }
 
-function renderGuidance() {
-  const container = document.getElementById("study-guidance");
-  const active = getActiveCollection();
-  if (!active) {
-    container.className = "guidance-panel empty-state";
-    container.textContent = "请先选择学习集合。";
-    return;
-  }
-
-  const guide = studyGuides[active.subject_key] || studyGuides.formula;
-  container.className = "guidance-panel";
-  container.innerHTML = `
-    <div class="guide-card">
-      <p class="guide-subject">${escapeHtml(active.subject_display_name)} · ${escapeHtml(active.title)}</p>
-      <h3>${escapeHtml(guide.title)}</h3>
-      <ul class="guide-list">
-        ${guide.tips
-          .map((tip) => `<li>${escapeHtml(tip)}</li>`)
-          .join("")}
-      </ul>
-    </div>
-  `;
-}
-
 function renderCollections() {
   const container = document.getElementById("collections-list");
   if (!state.collections.length) {
-    container.innerHTML = '<div class="empty-state">还没有学习集合，先创建一个复习专题。</div>';
+    container.className = "stack-list empty-state";
+    container.textContent = "先创建一个集合。";
     return;
   }
 
+  container.className = "stack-list";
   container.innerHTML = state.collections
     .map(
       (collection) => `
         <article
-          class="collection-item ${collection.id === state.activeCollectionId ? "is-active" : ""}"
+          class="list-card ${collection.id === state.activeCollectionId ? "is-active" : ""}"
           data-collection-id="${collection.id}"
         >
-          <div class="collection-topline">
-            <div class="chip">${escapeHtml(collection.subject_display_name)}</div>
+          <div class="list-card-top">
+            <span class="chip">${escapeHtml(collection.subject_display_name)}</span>
             <button
               type="button"
-              class="collection-delete"
+              class="delete-button"
               data-delete-collection-id="${collection.id}"
             >
               删除
             </button>
           </div>
           <h3>${escapeHtml(collection.title)}</h3>
-          <p>${escapeHtml(collection.description || "暂时没有备注。")}</p>
+          <p>${escapeHtml(collection.description || "暂无备注")}</p>
         </article>
       `,
     )
@@ -234,12 +130,9 @@ function renderCollections() {
   container.querySelectorAll("[data-collection-id]").forEach((item) => {
     item.addEventListener("click", async () => {
       state.activeCollectionId = Number(item.dataset.collectionId);
-      state.currentPaper = null;
-      syncCollectionSelects();
-      renderCollections();
-      renderGuidance();
-      renderPaper();
-      await refreshActiveCollection();
+      state.activeDocumentId = null;
+      state.activeCardId = null;
+      await refreshWorkspace();
     });
   });
 
@@ -251,179 +144,176 @@ function renderCollections() {
   });
 }
 
+function renderWorkspaceHeader() {
+  const active = getActiveCollection();
+  document.getElementById("workspace-title").textContent = active
+    ? active.title
+    : "选择一个集合开始导入 PDF";
+  document.getElementById("workspace-subtitle").textContent = active
+    ? `${active.subject_display_name} · ${active.description || "上传文档后，选择模板生成卡片。"}`
+    : "上传文档后，选择模板生成卡片，每张卡片都会带原文引用。";
+  document.getElementById("document-count").textContent = state.documents.length;
+  document.getElementById("card-count").textContent = state.cards.length;
+}
+
+function renderTemplates() {
+  const container = document.getElementById("template-list");
+  if (!state.templates.length) {
+    container.innerHTML = '<div class="empty-inline">当前学科还没有可用模板。</div>';
+    return;
+  }
+
+  if (!state.activeTemplateKey) {
+    state.activeTemplateKey = state.templates[0].key;
+  }
+
+  container.innerHTML = state.templates
+    .map(
+      (template) => `
+        <button
+          type="button"
+          class="template-chip ${template.key === state.activeTemplateKey ? "is-active" : ""}"
+          data-template-key="${template.key}"
+        >
+          <strong>${escapeHtml(template.label)}</strong>
+          <span>${escapeHtml(template.description)}</span>
+        </button>
+      `,
+    )
+    .join("");
+
+  container.querySelectorAll("[data-template-key]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.activeTemplateKey = button.dataset.templateKey;
+      renderTemplates();
+    });
+  });
+}
+
+function renderDocuments() {
+  const container = document.getElementById("documents-list");
+  if (!state.documents.length) {
+    container.className = "stack-list empty-state";
+    container.textContent = "还没有导入文档。";
+    return;
+  }
+
+  container.className = "stack-list";
+  container.innerHTML = state.documents
+    .map(
+      (document) => `
+        <article
+          class="list-card ${document.id === state.activeDocumentId ? "is-active" : ""}"
+          data-document-id="${document.id}"
+        >
+          <div class="list-meta">
+            <span class="chip">${escapeHtml(document.type.toUpperCase())}</span>
+            <span>${document.page_count} 页 / ${document.chunk_count} 段</span>
+          </div>
+          <h3>${escapeHtml(document.file_name)}</h3>
+          <p>${escapeHtml(document.preview || "暂无摘要")}</p>
+        </article>
+      `,
+    )
+    .join("");
+
+  container.querySelectorAll("[data-document-id]").forEach((item) => {
+    item.addEventListener("click", () => {
+      state.activeDocumentId = Number(item.dataset.documentId);
+      renderDocuments();
+    });
+  });
+}
+
 function renderCards() {
   const container = document.getElementById("cards-list");
-  const hint = document.getElementById("current-collection-hint");
-  const active = getActiveCollection();
-  hint.textContent = active
-    ? `当前集合：${active.title} · ${active.subject_display_name}`
-    : "还没有选择集合。";
-
   if (!state.cards.length) {
-    container.className = "feed-list empty-state";
-    container.textContent = active ? "这个集合还没有卡片。" : "暂无卡片";
+    container.className = "stack-list empty-state";
+    container.textContent = "还没有卡片。";
+    renderCardDetail();
     return;
   }
 
-  container.className = "feed-list";
+  container.className = "stack-list";
   container.innerHTML = state.cards
-    .map((card) => {
-      const detailRows = Object.entries(card.normalized_content || {})
-        .filter(([, value]) => value)
-        .map(
-          ([key, value]) => `
-            <div class="detail-row">
-              <strong>${escapeHtml(fieldLabels[key] || key)}</strong>
-              <span>${escapeHtml(value)}</span>
-            </div>
-          `,
-        )
-        .join("");
-
-      return `
-        <article class="feed-card">
-          <div class="meta">
+    .map(
+      (card) => `
+        <article
+          class="list-card ${card.id === state.activeCardId ? "is-active" : ""}"
+          data-card-id="${card.id}"
+        >
+          <div class="list-meta">
             <span class="chip">${escapeHtml(card.subject_display_name)}</span>
-            <span class="chip">${escapeHtml(card.category)}</span>
+            <span>${escapeHtml(card.template_key)}</span>
           </div>
           <h3>${escapeHtml(card.title)}</h3>
-          <p>${escapeHtml(card.raw_excerpt || "无摘录")}</p>
-          <div class="detail-grid">${detailRows}</div>
+          <p>${escapeHtml(card.raw_excerpt || "暂无摘录")}</p>
         </article>
-      `;
-    })
+      `,
+    )
     .join("");
+
+  container.querySelectorAll("[data-card-id]").forEach((item) => {
+    item.addEventListener("click", () => {
+      state.activeCardId = Number(item.dataset.cardId);
+      renderCards();
+      renderCardDetail();
+    });
+  });
+
+  if (!state.activeCardId && state.cards.length) {
+    state.activeCardId = state.cards[0].id;
+  }
+  renderCardDetail();
 }
 
-function renderRecentPractice() {
-  const container = document.getElementById("recent-practice-list");
-  if (!state.quizzes.length) {
-    container.className = "feed-list empty-state";
-    container.textContent = "暂无练习记录";
+function renderCardDetail() {
+  const container = document.getElementById("card-detail");
+  const card = getActiveCard();
+  if (!card) {
+    container.className = "empty-state";
+    container.textContent = "选择一张卡片查看详情。";
     return;
   }
 
-  container.className = "feed-list";
-  container.innerHTML = state.quizzes
-    .map((quiz) => {
-      const options = (quiz.options || [])
-        .map(
-          (option) => `
-            <li><strong>${escapeHtml(option.key)}.</strong> ${escapeHtml(option.value)}</li>
-          `,
-        )
-        .join("");
+  const detailRows = Object.entries(card.normalized_content || {})
+    .filter(([key, value]) => value && !["template_key", "template_label"].includes(key))
+    .map(
+      ([key, value]) => `
+        <div class="detail-row">
+          <strong>${escapeHtml(fieldLabels[key] || key)}</strong>
+          <span>${escapeHtml(value)}</span>
+        </div>
+      `,
+    )
+    .join("");
 
-      return `
-        <article class="quiz-card">
-          <div class="meta">
-            <span class="chip">${escapeHtml(typeLabels[quiz.type] || quiz.type)}</span>
-            <span class="chip">${escapeHtml(quiz.difficulty)}</span>
+  const citations = (card.citations || [])
+    .map(
+      (citation) => `
+        <article class="citation-card">
+          <div class="list-meta">
+            <span class="chip">${escapeHtml(citation.document_name)}</span>
+            <span>第 ${escapeHtml(citation.page_number)} 页</span>
           </div>
-          <h3>${escapeHtml(quiz.question)}</h3>
-          ${
-            options
-              ? `<ol class="option-list compact-option-list">${options}</ol>`
-              : '<p class="practice-note">主观题已生成，可展开查看参考答案。</p>'
-          }
-          <details class="answer-sheet">
-            <summary>查看答案</summary>
-            <p><strong>参考答案：</strong>${escapeHtml(quiz.answer || "暂无")}</p>
-            <p>${escapeHtml(quiz.explanation || "暂无解析")}</p>
-          </details>
+          <p>${escapeHtml(citation.quote)}</p>
         </article>
-      `;
-    })
+      `,
+    )
     .join("");
-}
 
-function renderPaper() {
-  const container = document.getElementById("paper-view");
-  if (!state.currentPaper) {
-    container.className = "paper-view empty-state";
-    container.textContent = "还没有生成训练卷。选择集合后试试“期末模拟”，页面会按大题结构展开。";
-    return;
-  }
-
-  const paper = state.currentPaper;
-  container.className = "paper-view";
+  container.className = "detail-stack";
   container.innerHTML = `
-    <div class="paper-header">
-      <p class="paper-kicker">${escapeHtml(modeLabels[paper.mode] || paper.mode)}</p>
-      <h2>${escapeHtml(paper.paper_title)}</h2>
-      <div class="paper-meta">
-        <span>${escapeHtml(paper.subject_display_name)}</span>
-        <span>总分 ${escapeHtml(paper.total_score)}</span>
-        <span>${escapeHtml(paper.sections.length)} 个大题</span>
-      </div>
-      <p class="paper-notice">${escapeHtml(paper.exam_notice)}</p>
+    <div class="detail-header">
+      <p class="workspace-kicker">${escapeHtml(card.subject_display_name)}</p>
+      <h3>${escapeHtml(card.title)}</h3>
+      <p>${escapeHtml(card.source_document_name || "无来源文档")}</p>
     </div>
-    ${paper.sections
-      .map(
-        (section) => `
-          <section class="paper-section">
-            <div class="paper-section-heading">
-              <div>
-                <h3>${escapeHtml(section.title)}</h3>
-                <p>${escapeHtml(section.instructions)}</p>
-              </div>
-              <div class="section-score">${escapeHtml(section.total_score)} 分</div>
-            </div>
-            <div class="question-stack">
-              ${section.questions
-                .map(
-                  (question, index) => `
-                    <article class="paper-question">
-                      <div class="question-topline">
-                        <span class="question-index">${index + 1}</span>
-                        <div class="meta">
-                          <span class="chip">${escapeHtml(typeLabels[question.type] || question.type)}</span>
-                          <span class="chip">${escapeHtml(question.score)} 分</span>
-                        </div>
-                      </div>
-                      <h4>${escapeHtml(question.question)}</h4>
-                      ${
-                        (question.options || []).length
-                          ? `<ol class="option-list">
-                              ${question.options
-                                .map(
-                                  (option) => `
-                                    <li>
-                                      <strong>${escapeHtml(option.key)}.</strong>
-                                      ${escapeHtml(option.value)}
-                                    </li>
-                                  `,
-                                )
-                                .join("")}
-                            </ol>`
-                          : `<div class="answer-template">
-                              <strong>建议答题结构</strong>
-                              <p>${escapeHtml(question.answer_template || "先写核心结论，再展开作答。")}</p>
-                            </div>`
-                      }
-                      <details class="answer-sheet">
-                        <summary>展开参考答案与得分点</summary>
-                        <p><strong>参考答案：</strong>${escapeHtml(question.answer || "暂无")}</p>
-                        <p>${escapeHtml(question.explanation || "暂无解析")}</p>
-                        ${
-                          (question.rubric || []).length
-                            ? `<div class="rubric-list">
-                                ${question.rubric
-                                  .map((item) => `<span class="rubric-chip">${escapeHtml(item)}</span>`)
-                                  .join("")}
-                              </div>`
-                            : ""
-                        }
-                      </details>
-                    </article>
-                  `,
-                )
-                .join("")}
-            </div>
-          </section>
-        `,
-      )
-      .join("")}
+    <div class="detail-grid">${detailRows}</div>
+    <div class="citation-stack">
+      <h4>原文引用</h4>
+      ${citations || '<div class="empty-inline">这张卡片还没有引用。</div>'}
+    </div>
   `;
 }
 
@@ -437,30 +327,45 @@ async function loadCollections() {
   if (!state.activeCollectionId && state.collections.length) {
     state.activeCollectionId = state.collections[0].id;
   }
-  syncCollectionSelects();
   renderCollections();
-  renderGuidance();
 }
 
-async function refreshActiveCollection() {
-  if (!state.activeCollectionId) {
+async function refreshWorkspace() {
+  renderCollections();
+  renderWorkspaceHeader();
+
+  const active = getActiveCollection();
+  if (!active) {
+    state.documents = [];
     state.cards = [];
-    state.quizzes = [];
-    state.currentPaper = null;
+    state.templates = [];
+    state.activeTemplateKey = null;
+    state.activeDocumentId = null;
+    state.activeCardId = null;
+    renderTemplates();
+    renderDocuments();
     renderCards();
-    renderRecentPractice();
-    renderPaper();
-    renderGuidance();
-    updateCounters();
     return;
   }
 
-  state.cards = await api(`/api/cards?collection_id=${state.activeCollectionId}`);
-  state.quizzes = await api(`/api/quizzes?collection_id=${state.activeCollectionId}&limit=8`);
+  state.documents = await api(`/api/documents?collection_id=${active.id}`);
+  state.cards = await api(`/api/cards?collection_id=${active.id}`);
+  state.templates = await api(`/api/templates?subject=${active.subject_key}`);
+
+  if (!state.activeDocumentId && state.documents.length) {
+    state.activeDocumentId = state.documents[0].id;
+  }
+  if (!state.cards.find((card) => card.id === state.activeCardId)) {
+    state.activeCardId = state.cards[0]?.id || null;
+  }
+  if (!state.templates.find((template) => template.key === state.activeTemplateKey)) {
+    state.activeTemplateKey = state.templates[0]?.key || null;
+  }
+
+  renderWorkspaceHeader();
+  renderTemplates();
+  renderDocuments();
   renderCards();
-  renderRecentPractice();
-  renderGuidance();
-  updateCounters();
 }
 
 async function createCollection(event) {
@@ -474,30 +379,15 @@ async function createCollection(event) {
   try {
     setButtonBusy(submitButton, true, "创建中...");
     setStatus("正在创建集合...");
-
-    const collection = await api("/api/collections", {
+    await api("/api/collections", {
       method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
-
-    upsertCollection(collection);
-    state.activeCollectionId = collection.id;
-    state.cards = [];
-    state.quizzes = [];
-    state.currentPaper = null;
-
     formElement.reset();
-    syncCollectionSelects();
-    renderCollections();
-    renderCards();
-    renderRecentPractice();
-    renderPaper();
-    renderGuidance();
-    updateCounters();
-    setStatus(`已创建集合：${collection.title}`);
-
     await loadCollections();
-    await refreshActiveCollection();
+    await refreshWorkspace();
+    setStatus(`已创建集合：${payload.title}`);
   } catch (error) {
     setStatus(`创建集合失败：${error.message}`);
   } finally {
@@ -506,72 +396,56 @@ async function createCollection(event) {
 }
 
 async function deleteCollection(collectionId) {
-  const target = state.collections.find((item) => item.id === collectionId);
-  if (!target) {
-    return;
-  }
-
   try {
-    setStatus(`正在删除集合：${target.title}`);
+    setStatus("正在删除集合...");
     await api(`/api/collections/${collectionId}`, { method: "DELETE" });
-    state.collections = state.collections.filter((item) => item.id !== collectionId);
-
     if (state.activeCollectionId === collectionId) {
-      state.activeCollectionId = state.collections[0]?.id || null;
-      state.currentPaper = null;
+      state.activeCollectionId = null;
+      state.activeDocumentId = null;
+      state.activeCardId = null;
     }
-
-    syncCollectionSelects();
-    renderCollections();
-    renderPaper();
-    await refreshActiveCollection();
-    updateCounters();
-    setStatus(`已删除集合：${target.title}`);
+    await loadCollections();
+    await refreshWorkspace();
+    setStatus("集合已删除。");
   } catch (error) {
     setStatus(`删除集合失败：${error.message}`);
   }
 }
 
-async function importTextAndGenerate(event) {
+async function uploadPdf(event) {
   event.preventDefault();
-  if (!state.collections.length) {
-    setStatus("请先创建集合。");
+  const active = getActiveCollection();
+  if (!active) {
+    setStatus("请先创建或选择一个集合。");
     return;
   }
 
   const formElement = event.currentTarget;
   const submitButton = formElement.querySelector('button[type="submit"]');
-  const form = new FormData(formElement);
-  const collectionId = Number(form.get("collection_id"));
-  const text = String(form.get("text") || "").trim();
+  const fileInput = document.getElementById("pdf-input");
+  const file = fileInput.files?.[0];
 
-  if (!text) {
-    setStatus("请先输入学习内容。");
+  if (!file) {
+    setStatus("请先选择一个 PDF。");
     return;
   }
 
+  const formData = new FormData();
+  formData.append("collection_id", String(active.id));
+  formData.append("file", file);
+
   try {
     setButtonBusy(submitButton, true, "导入中...");
-    setStatus("正在导入文本并生成卡片...");
-
-    const imported = await api("/api/import/text", {
+    setStatus("正在解析 PDF...");
+    const payload = await api("/api/import/pdf", {
       method: "POST",
-      body: JSON.stringify({
-        collection_id: collectionId,
-        text,
-      }),
+      body: formData,
     });
-
-    await api("/api/cards/generate", {
-      method: "POST",
-      body: JSON.stringify({ document_id: imported.document_id }),
-    });
-
-    state.activeCollectionId = collectionId;
-    syncCollectionSelects();
-    renderCollections();
-    await refreshActiveCollection();
-    setStatus(`文本已导入，并为集合 ${collectionId} 生成卡片。`);
+    fileInput.value = "";
+    await refreshWorkspace();
+    state.activeDocumentId = payload.document_id;
+    renderDocuments();
+    setStatus(`已导入文档，生成了 ${payload.chunk_count} 个片段。`);
   } catch (error) {
     setStatus(`导入失败：${error.message}`);
   } finally {
@@ -579,60 +453,80 @@ async function importTextAndGenerate(event) {
   }
 }
 
-async function generatePaper(event) {
-  event.preventDefault();
-  if (!state.collections.length) {
-    setStatus("请先创建集合。");
+async function generateCards() {
+  const activeDocument = getActiveDocument();
+  if (!activeDocument) {
+    setStatus("请先选择一个文档。");
+    return;
+  }
+  if (!state.activeTemplateKey) {
+    setStatus("请先选择一个模板。");
     return;
   }
 
-  const formElement = event.currentTarget;
-  const submitButton = formElement.querySelector('button[type="submit"]');
-  const form = new FormData(formElement);
-  const payload = {
-    collection_id: Number(form.get("collection_id")),
-    mode: String(form.get("mode")),
-    difficulty: String(form.get("difficulty")),
-  };
-
+  const button = document.getElementById("generate-button");
   try {
-    setButtonBusy(submitButton, true, "生成中...");
-    setStatus(`正在生成${modeLabels[payload.mode] || payload.mode}...`);
-
-    state.currentPaper = await api("/api/quizzes/generate-paper", {
+    setButtonBusy(button, true, "生成中...");
+    setStatus("正在按模板生成卡片...");
+    const payload = await api("/api/cards/generate", {
       method: "POST",
-      body: JSON.stringify(payload),
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        document_id: activeDocument.id,
+        template_key: state.activeTemplateKey,
+      }),
     });
-    state.activeCollectionId = payload.collection_id;
-    syncCollectionSelects();
-    renderCollections();
-    renderPaper();
-    await refreshActiveCollection();
-    setStatus(`已生成${modeLabels[payload.mode] || payload.mode}。`);
+    state.cards = await api(`/api/cards?collection_id=${state.activeCollectionId}`);
+    state.activeCardId = payload.cards[0]?.id || state.cards[0]?.id || null;
+    renderWorkspaceHeader();
+    renderCards();
+    setStatus(`已生成 ${payload.cards.length} 张卡片。`);
   } catch (error) {
-    setStatus(`生成训练卷失败：${error.message}`);
+    setStatus(`生成卡片失败：${error.message}`);
   } finally {
-    setButtonBusy(submitButton, false, "生成中...");
+    setButtonBusy(button, false, "生成中...");
+  }
+}
+
+async function exportCollection() {
+  const active = getActiveCollection();
+  if (!active) {
+    setStatus("请先选择一个集合。");
+    return;
+  }
+
+  const button = document.getElementById("export-button");
+  try {
+    setButtonBusy(button, true, "导出中...");
+    setStatus("正在导出 Markdown...");
+    const payload = await api(`/api/collections/${active.id}/export`);
+    const blob = new Blob([payload.content], { type: "text/markdown;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = payload.filename;
+    link.click();
+    URL.revokeObjectURL(url);
+    setStatus("导出完成。");
+  } catch (error) {
+    setStatus(`导出失败：${error.message}`);
+  } finally {
+    setButtonBusy(button, false, "导出中...");
   }
 }
 
 async function bootstrap() {
   try {
-    setStatus("正在加载项目数据...");
+    setStatus("正在加载知识库...");
     await loadSubjects();
     await loadCollections();
-    await refreshActiveCollection();
-    renderPaper();
-    updateCounters();
-    document
-      .getElementById("collection-form")
-      .addEventListener("submit", createCollection);
-    document
-      .getElementById("import-form")
-      .addEventListener("submit", importTextAndGenerate);
-    document.getElementById("paper-form").addEventListener("submit", generatePaper);
-    document.getElementById("refresh-button").addEventListener("click", refreshActiveCollection);
-    setStatus("准备就绪，可以开始生成训练卷。");
+    await refreshWorkspace();
+
+    document.getElementById("collection-form").addEventListener("submit", createCollection);
+    document.getElementById("upload-form").addEventListener("submit", uploadPdf);
+    document.getElementById("generate-button").addEventListener("click", generateCards);
+    document.getElementById("export-button").addEventListener("click", exportCollection);
+    setStatus("准备就绪，可以开始导入 PDF。");
   } catch (error) {
     setStatus(`初始化失败：${error.message}`);
   }

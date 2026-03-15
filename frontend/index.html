@@ -3,116 +3,41 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>OCDoctor · 期末冲刺训练台</title>
+    <title>OCDoctor · PDF 知识库</title>
     <link rel="stylesheet" href="/assets/styles.css" />
   </head>
   <body>
-    <div class="page-shell">
-      <header class="masthead panel">
-        <div class="masthead-brand">
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand">
           <div class="brand-mark">OC</div>
           <div>
             <p class="eyebrow">OCDoctor</p>
-            <h1>知识卡片 · 集合 · 小测 · 期末卷</h1>
+            <h1>PDF 知识库</h1>
+            <p class="brand-copy">只保留温病学和针灸学，文档导入后直接按模板抽卡并回链原文。</p>
           </div>
         </div>
-        <div class="hero-card hero-card-compact">
-          <div class="hero-stat">
-            <span id="collection-count">0</span>
-            <small>学习集合</small>
-          </div>
-          <div class="hero-stat">
-            <span id="card-count">0</span>
-            <small>知识卡片</small>
-          </div>
-          <div class="hero-stat">
-            <span id="quiz-count">0</span>
-            <small>近期练习</small>
-          </div>
-        </div>
-      </header>
 
-      <main class="studio-grid">
-        <section class="panel panel-wide panel-form">
+        <section class="sidebar-section">
           <div class="section-heading">
-            <h2>生成训练卷</h2>
-            <p>先选集合，再按章节练习或期末模拟生成整套训练内容。</p>
+            <h2>文件夹</h2>
+            <p>每个集合就是一个可保存、可导出的知识库目录。</p>
           </div>
-          <form id="paper-form" class="stack inline-form">
+          <div id="collections-list" class="stack-list empty-state">先创建一个集合。</div>
+        </section>
+
+        <section class="sidebar-section">
+          <div class="section-heading">
+            <h2>新建集合</h2>
+            <p>建议按课程章节、老师范围或一本教材建一个目录。</p>
+          </div>
+          <form id="collection-form" class="stack-form">
             <label>
-              <span>目标集合</span>
-              <select name="collection_id" id="paper-collection-select"></select>
-            </label>
-            <label>
-              <span>训练模式</span>
-              <select name="mode">
-                <option value="quick_practice">速练</option>
-                <option value="chapter_drill">章节训练</option>
-                <option value="final_mock" selected>期末模拟</option>
-              </select>
-            </label>
-            <label>
-              <span>难度</span>
-              <select name="difficulty">
-                <option value="easy">easy</option>
-                <option value="medium" selected>medium</option>
-                <option value="hard">hard</option>
-              </select>
-            </label>
-            <button type="submit">生成试卷</button>
-          </form>
-        </section>
-
-        <section class="panel panel-wide panel-paper">
-          <div id="paper-view" class="paper-view empty-state">
-            还没有生成训练卷。选择集合后试试“期末模拟”，页面会按大题结构展开。
-          </div>
-        </section>
-
-        <section class="panel panel-side">
-          <div class="section-heading">
-            <h2>备考提示</h2>
-            <p>根据当前集合所属学科，提醒同学把答题重点写完整。</p>
-          </div>
-          <div id="study-guidance" class="guidance-panel empty-state">请先选择学习集合。</div>
-        </section>
-
-        <section class="panel panel-side">
-          <div class="section-heading">
-            <h2>近期练习</h2>
-            <p>这里保留当前集合最近生成的题，方便回看错题和参考答案。</p>
-          </div>
-          <div id="recent-practice-list" class="feed-list empty-state">暂无练习记录</div>
-        </section>
-
-        <section class="panel panel-side">
-          <div class="section-heading">
-            <h2>知识卡片</h2>
-            <p id="current-collection-hint">还没有选择集合。</p>
-          </div>
-          <div id="cards-list" class="feed-list empty-state">暂无卡片</div>
-        </section>
-
-        <section class="panel panel-side">
-          <div class="section-heading">
-            <h2>学习集合</h2>
-            <p>按科目和老师划的范围建集合，后续就能按卷型直接出题。</p>
-          </div>
-          <div id="collections-list" class="collection-list"></div>
-        </section>
-
-        <section class="panel panel-form">
-          <div class="section-heading">
-            <h2>创建学习集合</h2>
-            <p>先选学科，再写清复习专题或章节范围。</p>
-          </div>
-          <form id="collection-form" class="stack">
-            <label>
-              <span>集合名称</span>
+              <span>名称</span>
               <input
                 name="title"
                 type="text"
-                placeholder="例如：温病学·卫气营血辨证"
+                placeholder="例如：温病学·卫气营血"
                 required
               />
             </label>
@@ -125,40 +50,86 @@
               <textarea
                 name="description"
                 rows="3"
-                placeholder="可写考试范围、老师常考点、章节名"
+                placeholder="可写教材名、章节、老师要求"
               ></textarea>
             </label>
             <button type="submit">创建集合</button>
           </form>
         </section>
+      </aside>
 
-        <section class="panel panel-form">
-          <div class="section-heading">
-            <h2>导入内容并生成卡片</h2>
-            <p>把教材段落、课堂笔记或复习提纲导进来，后端会生成后续出题所需的卡片。</p>
+      <main class="workspace">
+        <header class="workspace-header">
+          <div>
+            <p class="workspace-kicker">Knowledge Workspace</p>
+            <h2 id="workspace-title">选择一个集合开始导入 PDF</h2>
+            <p id="workspace-subtitle" class="workspace-subtitle">
+              上传文档后，选择模板生成卡片，每张卡片都会带原文引用。
+            </p>
           </div>
-          <form id="import-form" class="stack">
-            <label>
-              <span>目标集合</span>
-              <select name="collection_id" id="collection-select"></select>
-            </label>
-            <label>
-              <span>教材 / 笔记内容</span>
-              <textarea
-                name="text"
-                rows="8"
-                placeholder="例如：气分热盛证。阶段：气分。证候：壮热，大汗，大渴，脉洪大。治法：清气泄热。方药：白虎汤。"
-                required
-              ></textarea>
-            </label>
-            <div class="button-row">
-              <button type="submit">导入并生成卡片</button>
-              <button type="button" id="refresh-button" class="button-ghost">
-                刷新当前集合
-              </button>
+          <div class="workspace-stats">
+            <div class="stat-card">
+              <span id="document-count">0</span>
+              <small>文档</small>
             </div>
+            <div class="stat-card">
+              <span id="card-count">0</span>
+              <small>卡片</small>
+            </div>
+          </div>
+        </header>
+
+        <section class="composer">
+          <form id="upload-form" class="upload-form">
+            <div class="upload-copy">
+              <strong>上传 PDF</strong>
+              <p>导入教材、讲义或整理好的笔记 PDF，系统会先建 chunk，再按模板抽卡。</p>
+            </div>
+            <label class="file-input">
+              <span>选择 PDF</span>
+              <input id="pdf-input" name="file" type="file" accept="application/pdf" required />
+            </label>
+            <button type="submit">导入文档</button>
           </form>
+
+          <div class="template-toolbar">
+            <div class="template-copy">
+              <strong>模板</strong>
+              <p>固定模板优先，避免胡编乱造。</p>
+            </div>
+            <div id="template-list" class="template-list"></div>
+            <div class="button-row">
+              <button type="button" id="generate-button">生成卡片</button>
+              <button type="button" id="export-button" class="button-ghost">导出 Markdown</button>
+            </div>
+          </div>
         </section>
+
+        <div class="content-grid">
+          <section class="panel">
+            <div class="section-heading">
+              <h2>文档</h2>
+              <p>点击文档后，生成模板化卡片。</p>
+            </div>
+            <div id="documents-list" class="stack-list empty-state">还没有导入文档。</div>
+          </section>
+
+          <section class="panel">
+            <div class="section-heading">
+              <h2>卡片</h2>
+              <p>生成后的卡片会自动保存到当前集合中。</p>
+            </div>
+            <div id="cards-list" class="stack-list empty-state">还没有卡片。</div>
+          </section>
+
+          <section class="panel detail-panel">
+            <div class="section-heading">
+              <h2>引用细节</h2>
+              <p>查看卡片字段、出处页码和原文摘录。</p>
+            </div>
+            <div id="card-detail" class="empty-state">选择一张卡片查看详情。</div>
+          </section>
+        </div>
       </main>
     </div>
 

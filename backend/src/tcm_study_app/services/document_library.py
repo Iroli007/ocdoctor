@@ -128,6 +128,10 @@ class DocumentLibrary:
         heading = None
         for paragraph in paragraphs:
             candidate_heading = self._guess_heading(paragraph)
+            if candidate_heading and buffer:
+                chunks.append({"heading": heading, "content": buffer})
+                buffer = ""
+                heading = None
             if candidate_heading and not buffer:
                 heading = candidate_heading
 

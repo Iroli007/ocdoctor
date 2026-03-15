@@ -242,7 +242,7 @@ class LLMService:
 
     def _mock_extract_acupuncture(self, text: str) -> dict[str, Any]:
         """Mock acupuncture extraction for MVP."""
-        name_match = re.search(r"([\u4e00-\u9fa5]{1,6}(?:穴|俞|募))", text)
+        name_match = re.search(r"^\s*([\u4e00-\u9fa5]{1,8}(?:穴|俞|募)?)", text)
         meridian_match = re.search(r"(?:经络|归经|所属经脉)[：:]\s*([^\n。；;]+)", text)
         location_match = re.search(r"(?:定位)[：:]\s*([^\n]+)", text)
         indication_match = re.search(r"(?:主治)[：:]\s*([^\n]+)", text)

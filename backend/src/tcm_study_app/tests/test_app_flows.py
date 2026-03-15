@@ -1,4 +1,5 @@
-"""API flow tests for the multi-subject study app."""
+"""API flow tests for the knowledge-library app."""
+from tcm_study_app.services.document_library import DocumentLibrary
 
 
 def _create_collection(client, title: str, subject: str) -> dict:
@@ -24,72 +25,119 @@ def _import_text(client, collection_id: int, text: str) -> int:
     return response.json()["document_id"]
 
 
-def _generate_cards(client, document_id: int) -> None:
-    response = client.post("/api/cards/generate", json={"document_id": document_id})
-    assert response.status_code == 200
-
-
-def _seed_warm_disease_collection(client) -> dict:
-    collection = _create_collection(client, "温病学·期末训练", "温病学")
-    texts = [
-        "卫分证。阶段：卫分。证候：发热，微恶风寒，咽痛，口微渴。治法：辛凉解表。方药：银翘散。辨证要点：病位较浅，以表热为主。",
-        "气分热盛证。阶段：气分。证候：壮热，大汗，大渴，脉洪大。治法：清气泄热。方药：白虎汤。辨证要点：里热炽盛，津液受损。",
-        "营分证。阶段：营分。证候：身热夜甚，心烦不寐，舌绛。治法：清营透热。方药：清营汤。辨证要点：热入营分，夜热尤甚。",
-        "血分证。阶段：血分。证候：身热，斑疹，吐衄，舌深绛。治法：凉血散血。方药：犀角地黄汤。辨证要点：热入血分，动血耗血。",
-    ]
-    for text in texts:
-        document_id = _import_text(client, collection["id"], text)
-        _generate_cards(client, document_id)
-    return collection
-
-
 def test_subject_registry_endpoint(client):
-    """The frontend can discover supported subjects from the backend."""
+    """The frontend should only see the current target subjects."""
     response = client.get("/api/subjects")
     assert response.status_code == 200
     payload = response.json()
-    assert [item["key"] for item in payload] == [
-        "formula",
-        "acupuncture",
-        "warm_disease",
-    ]
+    assert [item["key"] for item in payload] == ["warm_disease", "acupuncture"]
 
 
-def test_formula_collection_import_and_card_generation(client):
-    """Formula collections keep formula-specific detail while using shared APIs."""
-    collection = _create_collection(client, "方剂学·解表剂", "方剂学")
-    assert collection["subject_key"] == "formula"
+def test_import_pdf_lists_document_and_chunks(client, monkeypatch):
+    """PDF import should create a parsed document library entry."""
+    collection = _create_collection(client, "温病学·PDF 导入", "温病学")
 
+    monkeypatch.setattr(
+        DocumentLibrary,
+        "_extract_pdf_pages",
+        lambda self, content: [
+            "卫分证\n阶段：卫分\n证候：发热，微恶风寒，咽痛\n治法：辛凉解表\n方药：银翘散",
+            "气分热盛证\n阶段：气分\n证候：壮热，大汗，大渴，脉洪大\n治法：清气泄热\n方药：白虎汤",
+        ],
+    )
+
+    response = client.post(
+        "/api/import/pdf",
+        data={"collection_id": str(collection["id"])},
+        files={"file": ("warm.pdf", b"%PDF-1.4 mock", "application/pdf")},
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["page_count"] == 2
+    assert payload["chunk_count"] >= 2
+
+    documents_response = client.get(f"/api/documents?collection_id={collection['id']}")
+    assert documents_response.status_code == 200
+    documents = documents_response.json()
+    assert documents[0]["file_name"] == "warm.pdf"
+    assert documents[0]["page_count"] == 2
+
+
+def test_template_generation_returns_cards_with_citations(client):
+    """Cards should be generated from document chunks and keep source citations."""
+    collection = _create_collection(client, "针灸学·模板卡片", "针灸学")
     document_id = _import_text(
         client,
         collection["id"],
-        "桂枝汤。组成：桂枝、芍药、生姜、大枣、甘草。功效：解肌发表，调和营卫。主治：外感风寒表虚证。",
+        """
+合谷穴
+经络：手阳明大肠经
+定位：手背第一、二掌骨间，当第二掌骨桡侧中点处
+主治：头痛、牙痛、面口病证
+刺灸法：直刺0.5-1寸
+注意：孕妇慎用强刺激
+
+足三里
+经络：足阳明胃经
+定位：犊鼻下3寸，距胫骨前缘一横指
+主治：胃痛、呕吐、腹胀、虚劳诸证
+刺灸法：直刺1-2寸
+注意：局部皮肤破损时避开操作
+        """.strip(),
     )
 
-    response = client.post("/api/cards/generate", json={"document_id": document_id})
+    response = client.post(
+        "/api/cards/generate",
+        json={
+            "document_id": document_id,
+            "template_key": "acupoint_foundation",
+        },
+    )
     assert response.status_code == 200
-    card = response.json()["cards"][0]
-    assert card["subject_key"] == "formula"
-    assert card["formula_card"]["formula_name"] == "桂枝汤"
-    assert card["normalized_content"]["effect"] == "解肌发表，调和营卫"
+    payload = response.json()
+
+    assert payload["status"] == "generated"
+    assert len(payload["cards"]) >= 2
+    assert payload["cards"][0]["subject_key"] == "acupuncture"
+    assert payload["cards"][0]["citations"]
+    assert payload["cards"][0]["source_document_name"] == "手动粘贴文本"
 
 
-def test_acupuncture_collection_uses_subject_adapter(client):
-    """Acupuncture collections should generate acupuncture detail instead of formula detail."""
-    collection = _create_collection(client, "针灸学·手阳明", "针灸学")
-
+def test_templates_endpoint_and_export_flow(client):
+    """Collections should export generated cards and templates should be discoverable."""
+    collection = _create_collection(client, "温病学·导出样例", "温病学")
     document_id = _import_text(
         client,
         collection["id"],
-        "合谷穴。经络：手阳明大肠经。定位：手背第一、二掌骨间。主治：头痛、牙痛。刺灸法：直刺0.5-1寸。",
+        """
+卫分证
+阶段：卫分
+证候：发热，微恶风寒，咽痛，口微渴
+治法：辛凉解表
+方药：银翘散
+辨证要点：病位较浅，以表热为主
+        """.strip(),
     )
+    generate_response = client.post(
+        "/api/cards/generate",
+        json={
+            "document_id": document_id,
+            "template_key": "pattern_treatment",
+        },
+    )
+    assert generate_response.status_code == 200
 
-    response = client.post("/api/cards/generate", json={"document_id": document_id})
-    assert response.status_code == 200
-    card = response.json()["cards"][0]
-    assert card["subject_key"] == "acupuncture"
-    assert card["acupuncture_card"]["acupoint_name"] == "合谷穴"
-    assert card["formula_card"] is None
+    templates_response = client.get("/api/templates?subject=warm_disease")
+    assert templates_response.status_code == 200
+    templates = templates_response.json()
+    assert templates[0]["key"] == "pattern_treatment"
+
+    export_response = client.get(f"/api/collections/{collection['id']}/export")
+    assert export_response.status_code == 200
+    export_payload = export_response.json()
+    assert export_payload["filename"].endswith(".md")
+    assert "卫分证" in export_payload["content"]
+    assert "引用" in export_payload["content"]
 
 
 def test_missing_collection_returns_http_friendly_404(client):
@@ -103,50 +151,8 @@ def test_missing_collection_returns_http_friendly_404(client):
 
 
 def test_root_serves_html_for_browser_requests(client):
-    """Browsers should receive the practical frontend page at root."""
+    """Browsers should receive the focused knowledge-library frontend."""
     response = client.get("/", headers={"accept": "text/html"})
     assert response.status_code == 200
     assert "text/html" in response.headers["content-type"]
-    assert "知识卡片 · 集合 · 小测 · 期末卷" in response.text
-
-
-def test_collection_delete_removes_collection(client):
-    """Collections should be deletable through the API."""
-    collection = _create_collection(client, "待删除集合", "方剂学")
-    response = client.delete(f"/api/collections/{collection['id']}")
-    assert response.status_code == 200
-    assert response.json()["status"] == "deleted"
-
-    list_response = client.get("/api/collections")
-    titles = [item["title"] for item in list_response.json()]
-    assert "待删除集合" not in titles
-
-
-def test_generate_paper_returns_structured_exam_sections(client):
-    """Practice-paper endpoint should return grouped exam sections."""
-    collection = _seed_warm_disease_collection(client)
-
-    response = client.post(
-        "/api/quizzes/generate-paper",
-        json={
-            "collection_id": collection["id"],
-            "mode": "final_mock",
-            "difficulty": "medium",
-        },
-    )
-    assert response.status_code == 200
-    payload = response.json()
-
-    assert payload["subject_key"] == "warm_disease"
-    assert payload["paper_title"].startswith("广州中医药大学《温病学》")
-    assert [section["title"] for section in payload["sections"]] == [
-        "一、选择题",
-        "二、名词解释",
-        "三、简答题",
-        "四、论述 / 病例分析题",
-    ]
-    assert any(
-        question["type"] == "case_analysis"
-        for section in payload["sections"]
-        for question in section["questions"]
-    )
+    assert "PDF 知识库" in response.text
