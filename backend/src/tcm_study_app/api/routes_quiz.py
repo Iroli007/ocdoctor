@@ -173,7 +173,7 @@ async def generate_quiz_paper(
                         question=question["question"],
                         options=[
                             QuizOption(key=option["key"], value=option["value"])
-                            for option in question.get("options", [])
+                            for option in (question.get("options") or [])
                         ]
                         or None,
                         score=question["score"],
