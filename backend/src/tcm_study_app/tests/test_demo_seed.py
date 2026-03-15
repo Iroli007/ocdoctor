@@ -79,3 +79,44 @@ def test_seed_demo_content_preserves_existing_user_data():
         db.close()
         Base.metadata.drop_all(bind=engine)
         engine.dispose()
+
+
+def test_seed_demo_content_cleans_up_duplicate_demo_collections():
+    """Repeated startup seeds should collapse duplicate demo collections back to one copy."""
+    engine = create_engine(
+        "sqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    testing_session_local = sessionmaker(
+        autocommit=False,
+        autoflush=False,
+        bind=engine,
+        class_=Session,
+    )
+    Base.metadata.create_all(bind=engine)
+
+    db = testing_session_local()
+    try:
+        seed_demo_content(db)
+        duplicate = StudyCollection(
+            user_id=1,
+            title="方剂学·速测样例",
+            subject="方剂学",
+            description="重复的演示集合",
+        )
+        db.add(duplicate)
+        db.commit()
+
+        seeded_count = seed_demo_content(db)
+        assert seeded_count == 0
+        matching = (
+            db.query(StudyCollection)
+            .filter(StudyCollection.title == "方剂学·速测样例")
+            .all()
+        )
+        assert len(matching) == 1
+    finally:
+        db.close()
+        Base.metadata.drop_all(bind=engine)
+        engine.dispose()

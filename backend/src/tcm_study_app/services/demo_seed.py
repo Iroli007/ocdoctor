@@ -203,6 +203,20 @@ def seed_demo_content(db: Session) -> int:
 
     seeded_collections = 0
     for collection_data in DEMO_COLLECTIONS:
+        existing_matches = (
+            db.query(StudyCollection)
+            .filter(
+                StudyCollection.user_id == user.id,
+                StudyCollection.title == collection_data["title"],
+            )
+            .order_by(StudyCollection.id.asc())
+            .all()
+        )
+        if len(existing_matches) > 1:
+            for duplicate in existing_matches[1:]:
+                db.delete(duplicate)
+            db.flush()
+
         existing = (
             db.query(StudyCollection)
             .filter(

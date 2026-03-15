@@ -38,11 +38,23 @@ class KnowledgeCard(Base):
         "SourceDocument", back_populates="knowledge_cards"
     )
     formula_card: Mapped["FormulaCard"] = relationship(
-        "FormulaCard", back_populates="knowledge_card", uselist=False
+        "FormulaCard",
+        back_populates="knowledge_card",
+        uselist=False,
+        cascade="all, delete-orphan",
+        single_parent=True,
     )
     acupuncture_card: Mapped["AcupunctureCard"] = relationship(
-        "AcupunctureCard", back_populates="knowledge_card", uselist=False
+        "AcupunctureCard",
+        back_populates="knowledge_card",
+        uselist=False,
+        cascade="all, delete-orphan",
+        single_parent=True,
     )
     warm_disease_card: Mapped["WarmDiseaseCard"] = relationship(
-        "WarmDiseaseCard", back_populates="knowledge_card", uselist=False
+        "WarmDiseaseCard",
+        back_populates="knowledge_card",
+        uselist=False,
+        cascade="all, delete-orphan",
+        single_parent=True,
     )
