@@ -12,11 +12,13 @@ LEGACY_DEMO_TITLES = {
     "方剂学·速测样例",
     "针灸学·穴位样例",
     "温病学·辨证样例",
+    "温病学·教材样例",
+    "针灸学·教材样例",
 }
 
 DEMO_COLLECTIONS = [
     {
-        "title": "温病学·教材样例",
+        "title": "温病学",
         "subject": "温病学",
         "description": "演示 PDF / 文档解析、证候辨治卡与原文引用。",
         "document_name": "温病学-卫气营血讲义.pdf",
@@ -45,7 +47,7 @@ DEMO_COLLECTIONS = [
 """.strip(),
     },
     {
-        "title": "针灸学·教材样例",
+        "title": "针灸学",
         "subject": "针灸学",
         "description": "演示穴位基础卡、引用页码与导出。",
         "document_name": "针灸学-常用穴讲义.pdf",

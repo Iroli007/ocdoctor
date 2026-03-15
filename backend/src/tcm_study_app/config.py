@@ -11,12 +11,12 @@ def _default_database_url() -> str:
 
 
 def _default_seed_demo_content() -> bool:
-    """Demo seeding disabled — demo collections removed from frontend."""
+    """Seed demo content automatically on hosted environments by default."""
     env_value = os.getenv("SEED_DEMO_CONTENT")
     if env_value is not None:
         return env_value.lower() in {"1", "true", "yes", "on"}
 
-    return False
+    return bool(os.getenv("VERCEL"))
 
 
 def normalize_database_url(database_url: str) -> str:
