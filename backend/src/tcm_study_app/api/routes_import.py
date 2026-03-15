@@ -8,6 +8,8 @@ from tcm_study_app.services import create_document_library
 
 router = APIRouter(prefix="/api/import", tags=["import"])
 
+MAX_PDF_UPLOAD_BYTES = 4 * 1024 * 1024
+
 
 @router.post("/text", response_model=ImportTextResponse)
 async def import_text(request: ImportTextRequest, db: Session = Depends(get_db)):
@@ -39,6 +41,14 @@ async def import_pdf(
         raise HTTPException(status_code=400, detail="Please upload a PDF file")
 
     content = await file.read()
+    if len(content) > MAX_PDF_UPLOAD_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=(
+                "PDF 文件过大。当前网页上传路径仅支持 4 MB 以内 PDF；"
+                "更大的文件请先压缩/拆分，或改成直传对象存储后再解析。"
+            ),
+        )
     library = create_document_library(db)
     try:
         document = library.import_pdf_document(collection_id, file.filename, content)

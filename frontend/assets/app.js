@@ -10,6 +10,8 @@ const state = {
   activeTemplateKey: null,
 };
 
+const MAX_WEB_PDF_UPLOAD_BYTES = 4 * 1024 * 1024;
+
 const fieldLabels = {
   acupoint_name: "穴位名称",
   meridian: "经络",
@@ -69,6 +71,28 @@ function setButtonBusy(button, isBusy, busyLabel) {
   }
   button.disabled = isBusy;
   button.textContent = isBusy ? busyLabel : button.dataset.defaultLabel;
+}
+
+function syncCollectionSelects() {
+  const uploadSelect = document.getElementById("upload-collection-select");
+  if (!uploadSelect) {
+    return;
+  }
+
+  const current = String(state.activeCollectionId || "");
+  uploadSelect.innerHTML = state.collections.length
+    ? state.collections
+        .map(
+          (collection) => `
+            <option value="${collection.id}" ${
+              String(collection.id) === current ? "selected" : ""
+            }>
+              ${escapeHtml(collection.title)} · ${escapeHtml(collection.subject_display_name)}
+            </option>
+          `,
+        )
+        .join("")
+    : '<option value="">请先创建集合</option>';
 }
 
 function getActiveCollection() {
@@ -132,6 +156,7 @@ function renderCollections() {
       state.activeCollectionId = Number(item.dataset.collectionId);
       state.activeDocumentId = null;
       state.activeCardId = null;
+      syncCollectionSelects();
       await refreshWorkspace();
     });
   });
@@ -206,9 +231,18 @@ function renderDocuments() {
           class="list-card ${document.id === state.activeDocumentId ? "is-active" : ""}"
           data-document-id="${document.id}"
         >
-          <div class="list-meta">
-            <span class="chip">${escapeHtml(document.type.toUpperCase())}</span>
-            <span>${document.page_count} 页 / ${document.chunk_count} 段</span>
+          <div class="list-card-top">
+            <div class="list-meta">
+              <span class="chip">${escapeHtml(document.type.toUpperCase())}</span>
+              <span>${document.page_count} 页 / ${document.chunk_count} 段</span>
+            </div>
+            <button
+              type="button"
+              class="delete-button"
+              data-delete-document-id="${document.id}"
+            >
+              删除
+            </button>
           </div>
           <h3>${escapeHtml(document.file_name)}</h3>
           <p>${escapeHtml(document.preview || "暂无摘要")}</p>
@@ -221,6 +255,13 @@ function renderDocuments() {
     item.addEventListener("click", () => {
       state.activeDocumentId = Number(item.dataset.documentId);
       renderDocuments();
+    });
+  });
+
+  container.querySelectorAll("[data-delete-document-id]").forEach((button) => {
+    button.addEventListener("click", async (event) => {
+      event.stopPropagation();
+      await deleteDocument(Number(button.dataset.deleteDocumentId));
     });
   });
 }
@@ -327,6 +368,7 @@ async function loadCollections() {
   if (!state.activeCollectionId && state.collections.length) {
     state.activeCollectionId = state.collections[0].id;
   }
+  syncCollectionSelects();
   renderCollections();
 }
 
@@ -414,8 +456,9 @@ async function deleteCollection(collectionId) {
 
 async function uploadPdf(event) {
   event.preventDefault();
-  const active = getActiveCollection();
-  if (!active) {
+  const collectionSelect = document.getElementById("upload-collection-select");
+  const targetCollectionId = Number(collectionSelect.value);
+  if (!targetCollectionId) {
     setStatus("请先创建或选择一个集合。");
     return;
   }
@@ -429,9 +472,15 @@ async function uploadPdf(event) {
     setStatus("请先选择一个 PDF。");
     return;
   }
+  if (file.size > MAX_WEB_PDF_UPLOAD_BYTES) {
+    setStatus(
+      "这个 PDF 超过当前网页直传限制。请先压缩或拆分到 4 MB 内，再上传到对应集合；200 MB 这类大文件需要改成直传对象存储后再解析。",
+    );
+    return;
+  }
 
   const formData = new FormData();
-  formData.append("collection_id", String(active.id));
+  formData.append("collection_id", String(targetCollectionId));
   formData.append("file", file);
 
   try {
@@ -442,6 +491,7 @@ async function uploadPdf(event) {
       body: formData,
     });
     fileInput.value = "";
+    state.activeCollectionId = targetCollectionId;
     await refreshWorkspace();
     state.activeDocumentId = payload.document_id;
     renderDocuments();
@@ -512,6 +562,21 @@ async function exportCollection() {
     setStatus(`导出失败：${error.message}`);
   } finally {
     setButtonBusy(button, false, "导出中...");
+  }
+}
+
+async function deleteDocument(documentId) {
+  try {
+    setStatus("正在删除文档...");
+    await api(`/api/documents/${documentId}`, { method: "DELETE" });
+    if (state.activeDocumentId === documentId) {
+      state.activeDocumentId = null;
+      state.activeCardId = null;
+    }
+    await refreshWorkspace();
+    setStatus("文档已删除。");
+  } catch (error) {
+    setStatus(`删除文档失败：${error.message}`);
   }
 }
 

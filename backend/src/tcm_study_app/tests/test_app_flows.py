@@ -63,6 +63,57 @@ def test_import_pdf_lists_document_and_chunks(client, monkeypatch):
     assert documents[0]["page_count"] == 2
 
 
+def test_delete_document_removes_generated_cards(client):
+    """Deleting a document should also remove cards generated from that document."""
+    collection = _create_collection(client, "针灸学·删除文档", "针灸学")
+    document_id = _import_text(
+        client,
+        collection["id"],
+        """
+合谷穴
+经络：手阳明大肠经
+定位：手背第一、二掌骨间，当第二掌骨桡侧中点处
+主治：头痛、牙痛、面口病证
+刺灸法：直刺0.5-1寸
+注意：孕妇慎用强刺激
+        """.strip(),
+    )
+
+    generate_response = client.post(
+        "/api/cards/generate",
+        json={"document_id": document_id, "template_key": "acupoint_foundation"},
+    )
+    assert generate_response.status_code == 200
+    assert client.get(f"/api/cards?collection_id={collection['id']}").json()
+
+    delete_response = client.delete(f"/api/documents/{document_id}")
+    assert delete_response.status_code == 200
+    assert delete_response.json()["status"] == "deleted"
+
+    documents_response = client.get(f"/api/documents?collection_id={collection['id']}")
+    assert documents_response.status_code == 200
+    assert documents_response.json() == []
+
+    cards_response = client.get(f"/api/cards?collection_id={collection['id']}")
+    assert cards_response.status_code == 200
+    assert cards_response.json() == []
+
+
+def test_import_pdf_rejects_oversized_upload(client):
+    """Oversized PDFs should fail with a clear HTTP-friendly message."""
+    collection = _create_collection(client, "温病学·超大 PDF", "温病学")
+    oversized_pdf = b"x" * (4 * 1024 * 1024 + 1)
+
+    response = client.post(
+        "/api/import/pdf",
+        data={"collection_id": str(collection["id"])},
+        files={"file": ("large.pdf", oversized_pdf, "application/pdf")},
+    )
+
+    assert response.status_code == 413
+    assert "4 MB" in response.json()["detail"]
+
+
 def test_template_generation_returns_cards_with_citations(client):
     """Cards should be generated from document chunks and keep source citations."""
     collection = _create_collection(client, "针灸学·模板卡片", "针灸学")

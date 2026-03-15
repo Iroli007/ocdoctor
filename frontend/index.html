@@ -61,7 +61,7 @@
       <main class="workspace">
         <header class="workspace-header">
           <div>
-            <p class="workspace-kicker">Knowledge Workspace</p>
+            <p class="workspace-kicker">OCDoctor</p>
             <h2 id="workspace-title">选择一个集合开始导入 PDF</h2>
             <p id="workspace-subtitle" class="workspace-subtitle">
               上传文档后，选择模板生成卡片，每张卡片都会带原文引用。
@@ -85,6 +85,10 @@
               <strong>上传 PDF</strong>
               <p>导入教材、讲义或整理好的笔记 PDF，系统会先建 chunk，再按模板抽卡。</p>
             </div>
+            <label>
+              <span>目标集合</span>
+              <select id="upload-collection-select" name="collection_id"></select>
+            </label>
             <label class="file-input">
               <span>选择 PDF</span>
               <input id="pdf-input" name="file" type="file" accept="application/pdf" required />

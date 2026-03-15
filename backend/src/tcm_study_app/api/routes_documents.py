@@ -69,3 +69,19 @@ async def get_document(document_id: int, db: Session = Depends(get_db)):
             for chunk in document.chunks
         ],
     )
+
+
+@router.delete("/{document_id}")
+async def delete_document(document_id: int, db: Session = Depends(get_db)):
+    """Delete one document and all learning data generated from it."""
+    library = create_document_library(db)
+    try:
+        document = library.delete_document(document_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    return {
+        "status": "deleted",
+        "document_id": document_id,
+        "file_name": Path(document.image_url or f"文档-{document.id}").name,
+    }

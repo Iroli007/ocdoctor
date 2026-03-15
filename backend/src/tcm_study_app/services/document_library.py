@@ -6,7 +6,8 @@ import re
 from pypdf import PdfReader
 from sqlalchemy.orm import Session
 
-from tcm_study_app.models import DocumentChunk, SourceDocument, StudyCollection
+from tcm_study_app.models import KnowledgeCard, SourceDocument, StudyCollection
+from tcm_study_app.models.document_chunk import DocumentChunk
 
 
 class DocumentLibrary:
@@ -78,6 +79,18 @@ class DocumentLibrary:
         document = self.db.get(SourceDocument, document_id)
         if not document:
             raise ValueError(f"Document {document_id} not found")
+        return document
+
+    def delete_document(self, document_id: int) -> SourceDocument:
+        """Delete one imported document and any cards generated from it."""
+        document = self.get_document(document_id)
+        (
+            self.db.query(KnowledgeCard)
+            .filter(KnowledgeCard.source_document_id == document.id)
+            .delete(synchronize_session=False)
+        )
+        self.db.delete(document)
+        self.db.commit()
         return document
 
     def _require_collection(self, collection_id: int) -> StudyCollection:
