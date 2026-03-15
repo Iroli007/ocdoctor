@@ -47,6 +47,15 @@ class GenerateQuizRequest(BaseModel):
     difficulty: str = "medium"
 
 
+class GenerateQuizPaperRequest(BaseModel):
+    """Request schema for generating a structured practice paper."""
+
+    collection_id: int
+    mode: str = "final_mock"
+    difficulty: str = "medium"
+    template: str | None = None
+
+
 class QuizResponse(BaseModel):
     """Response schema for quiz."""
 
@@ -57,3 +66,41 @@ class QuizResponse(BaseModel):
     question: str
     options: list[QuizOption] | None = None
     difficulty: str
+    answer: str | None = None
+    explanation: str | None = None
+
+
+class QuizPaperQuestionResponse(BaseModel):
+    """Structured paper question schema."""
+
+    id: int | None = None
+    type: str
+    question: str
+    options: list[QuizOption] | None = None
+    score: int
+    answer: str | None = None
+    explanation: str | None = None
+    rubric: list[str] = []
+    answer_template: str | None = None
+
+
+class QuizPaperSectionResponse(BaseModel):
+    """A section inside a generated practice paper."""
+
+    title: str
+    instructions: str
+    total_score: int
+    question_count: int
+    questions: list[QuizPaperQuestionResponse]
+
+
+class QuizPaperResponse(BaseModel):
+    """Structured practice paper schema."""
+
+    paper_title: str
+    subject_key: str
+    subject_display_name: str
+    mode: str
+    total_score: int
+    exam_notice: str
+    sections: list[QuizPaperSectionResponse]

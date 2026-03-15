@@ -9,8 +9,12 @@ from tcm_study_app.schemas import (
     ComparisonItemResponse,
     ComparisonPoint,
     GenerateComparisonRequest,
+    GenerateQuizPaperRequest,
     GenerateQuizRequest,
     QuizOption,
+    QuizPaperQuestionResponse,
+    QuizPaperResponse,
+    QuizPaperSectionResponse,
     QuizResponse,
 )
 from tcm_study_app.services import (
@@ -122,10 +126,68 @@ async def generate_quiz(request: GenerateQuizRequest, db: Session = Depends(get_
                 question=quiz.question,
                 options=options,
                 difficulty=quiz.difficulty,
+                answer=quiz.answer,
+                explanation=quiz.explanation,
             )
         )
 
     return result
+
+
+@router.post("/quizzes/generate-paper", response_model=QuizPaperResponse)
+async def generate_quiz_paper(
+    request: GenerateQuizPaperRequest,
+    db: Session = Depends(get_db),
+):
+    """Generate a structured practice paper for a collection."""
+    generator = create_quiz_generator(db)
+    try:
+        paper = generator.generate_paper(
+            request.collection_id,
+            mode=request.mode,
+            difficulty=request.difficulty,
+            template=request.template,
+        )
+    except ValueError as exc:
+        message = str(exc)
+        status_code = 404 if "not found" in message.lower() else 400
+        raise HTTPException(status_code=status_code, detail=message) from exc
+
+    return QuizPaperResponse(
+        paper_title=paper["paper_title"],
+        subject_key=paper["subject_key"],
+        subject_display_name=paper["subject_display_name"],
+        mode=paper["mode"],
+        total_score=paper["total_score"],
+        exam_notice=paper["exam_notice"],
+        sections=[
+            QuizPaperSectionResponse(
+                title=section["title"],
+                instructions=section["instructions"],
+                total_score=section["total_score"],
+                question_count=section["question_count"],
+                questions=[
+                    QuizPaperQuestionResponse(
+                        id=question["id"],
+                        type=question["type"],
+                        question=question["question"],
+                        options=[
+                            QuizOption(key=option["key"], value=option["value"])
+                            for option in question.get("options", [])
+                        ]
+                        or None,
+                        score=question["score"],
+                        answer=question.get("answer"),
+                        explanation=question.get("explanation"),
+                        rubric=question.get("rubric", []),
+                        answer_template=question.get("answer_template"),
+                    )
+                    for question in section["questions"]
+                ],
+            )
+            for section in paper["sections"]
+        ],
+    )
 
 
 @router.get("/quizzes", response_model=list[QuizResponse])
@@ -152,6 +214,8 @@ async def get_quizzes(
                 question=quiz.question,
                 options=options,
                 difficulty=quiz.difficulty,
+                answer=quiz.answer,
+                explanation=quiz.explanation,
             )
         )
 
