@@ -1,5 +1,5 @@
 """Collection routes."""
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from tcm_study_app.core import get_subject_definition
@@ -57,3 +57,16 @@ async def create_collection(
     db.commit()
     db.refresh(collection)
     return collection
+
+
+@router.delete("/{collection_id}")
+async def delete_collection(collection_id: int, db: Session = Depends(get_db)):
+    """Delete a collection and all of its dependent learning data."""
+    collection = db.get(StudyCollection, collection_id)
+    if not collection:
+        raise HTTPException(status_code=404, detail=f"Collection {collection_id} not found")
+
+    title = collection.title
+    db.delete(collection)
+    db.commit()
+    return {"status": "deleted", "collection_id": collection_id, "title": title}

@@ -33,9 +33,59 @@
       </header>
 
       <main class="dashboard">
+        <section class="panel panel-primary panel-form">
+          <div class="section-heading">
+            <h2>1. 先出题</h2>
+            <p>把生成小测放到第一顺位，直接开始练。</p>
+          </div>
+          <form id="quiz-form" class="stack inline-form">
+            <label>
+              <span>集合</span>
+              <select name="collection_id" id="quiz-collection-select"></select>
+            </label>
+            <label>
+              <span>数量</span>
+              <input name="count" type="number" min="1" max="10" value="3" />
+            </label>
+            <label>
+              <span>难度</span>
+              <select name="difficulty">
+                <option value="easy">easy</option>
+                <option value="medium" selected>medium</option>
+                <option value="hard">hard</option>
+              </select>
+            </label>
+            <button type="submit">生成题目</button>
+          </form>
+        </section>
+
+        <section class="panel panel-primary panel-feed">
+          <div class="section-heading">
+            <h2>2. 最新小测</h2>
+            <p>先看最新生成的题，直接开始做。</p>
+          </div>
+          <div id="quizzes-list" class="feed-list empty-state">暂无题目</div>
+        </section>
+
+        <section class="panel panel-secondary panel-feed">
+          <div class="section-heading">
+            <h2>3. 知识卡片</h2>
+            <p id="current-collection-hint">还没有选择集合。</p>
+          </div>
+          <div id="cards-list" class="feed-list empty-state">暂无卡片</div>
+        </section>
+
+        <section class="panel panel-secondary panel-feed">
+          <div class="section-heading">
+            <h2>4. 学习集合</h2>
+            <p>常用集合留在这里，支持直接删除杂项集合。</p>
+          </div>
+          <div id="collections-list" class="collection-list"></div>
+        </section>
+
         <section class="panel panel-form">
           <div class="section-heading">
-            <h2>1. 创建学习集合</h2>
+            <h2>5. 创建学习集合</h2>
             <p>先选学科，再给集合一个明确主题。</p>
           </div>
           <form id="collection-form" class="stack">
@@ -66,7 +116,7 @@
 
         <section class="panel panel-form">
           <div class="section-heading">
-            <h2>2. 导入内容并生成卡片</h2>
+            <h2>6. 导入内容并生成卡片</h2>
             <p>现在优先支持文本导入；图片 OCR 也可以作为后续入口。</p>
           </div>
           <form id="import-form" class="stack">
@@ -90,56 +140,6 @@
               </button>
             </div>
           </form>
-        </section>
-
-        <section class="panel panel-form">
-          <div class="section-heading">
-            <h2>3. 生成小测</h2>
-            <p>题目会跟随集合所属学科走，不再默认只按方剂学提问。</p>
-          </div>
-          <form id="quiz-form" class="stack inline-form">
-            <label>
-              <span>集合</span>
-              <select name="collection_id" id="quiz-collection-select"></select>
-            </label>
-            <label>
-              <span>数量</span>
-              <input name="count" type="number" min="1" max="10" value="3" />
-            </label>
-            <label>
-              <span>难度</span>
-              <select name="difficulty">
-                <option value="easy">easy</option>
-                <option value="medium" selected>medium</option>
-                <option value="hard">hard</option>
-              </select>
-            </label>
-            <button type="submit">生成题目</button>
-          </form>
-        </section>
-
-        <section class="panel panel-feed">
-          <div class="section-heading">
-            <h2>学习集合</h2>
-            <p>点击任意集合，右侧会刷新卡片与题目。</p>
-          </div>
-          <div id="collections-list" class="collection-list"></div>
-        </section>
-
-        <section class="panel panel-feed">
-          <div class="section-heading">
-            <h2>知识卡片</h2>
-            <p id="current-collection-hint">还没有选择集合。</p>
-          </div>
-          <div id="cards-list" class="feed-list empty-state">暂无卡片</div>
-        </section>
-
-        <section class="panel panel-feed">
-          <div class="section-heading">
-            <h2>最新小测</h2>
-            <p>适合做一个快速自查。</p>
-          </div>
-          <div id="quizzes-list" class="feed-list empty-state">暂无题目</div>
         </section>
       </main>
     </div>

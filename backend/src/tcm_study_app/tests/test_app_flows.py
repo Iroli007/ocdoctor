@@ -89,3 +89,15 @@ def test_root_serves_html_for_browser_requests(client):
     assert response.status_code == 200
     assert "text/html" in response.headers["content-type"]
     assert "一个后端，多学科扩展" in response.text
+
+
+def test_collection_delete_removes_collection(client):
+    """Collections should be deletable through the API."""
+    collection = _create_collection(client, "待删除集合", "方剂学")
+    response = client.delete(f"/api/collections/{collection['id']}")
+    assert response.status_code == 200
+    assert response.json()["status"] == "deleted"
+
+    list_response = client.get("/api/collections")
+    titles = [item["title"] for item in list_response.json()]
+    assert "待删除集合" not in titles

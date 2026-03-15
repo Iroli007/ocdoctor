@@ -134,7 +134,16 @@ function renderCollections() {
           class="collection-item ${collection.id === state.activeCollectionId ? "is-active" : ""}"
           data-collection-id="${collection.id}"
         >
-          <div class="chip">${collection.subject_display_name}</div>
+          <div class="collection-topline">
+            <div class="chip">${collection.subject_display_name}</div>
+            <button
+              type="button"
+              class="collection-delete"
+              data-delete-collection-id="${collection.id}"
+            >
+              删除
+            </button>
+          </div>
           <h3>${collection.title}</h3>
           <p>${collection.description || "暂时没有备注。"}</p>
         </article>
@@ -148,6 +157,13 @@ function renderCollections() {
       syncCollectionSelects();
       renderCollections();
       await refreshActiveCollection();
+    });
+  });
+
+  container.querySelectorAll("[data-delete-collection-id]").forEach((button) => {
+    button.addEventListener("click", async (event) => {
+      event.stopPropagation();
+      await deleteCollection(Number(button.dataset.deleteCollectionId));
     });
   });
 }
@@ -291,6 +307,31 @@ async function createCollection(event) {
     setStatus(`创建集合失败：${error.message}`);
   } finally {
     setButtonBusy(submitButton, false, "创建中...");
+  }
+}
+
+async function deleteCollection(collectionId) {
+  const target = state.collections.find((item) => item.id === collectionId);
+  if (!target) {
+    return;
+  }
+
+  try {
+    setStatus(`正在删除集合：${target.title}`);
+    await api(`/api/collections/${collectionId}`, { method: "DELETE" });
+    state.collections = state.collections.filter((item) => item.id !== collectionId);
+
+    if (state.activeCollectionId === collectionId) {
+      state.activeCollectionId = state.collections[0]?.id || null;
+    }
+
+    syncCollectionSelects();
+    renderCollections();
+    await refreshActiveCollection();
+    updateCounters();
+    setStatus(`已删除集合：${target.title}`);
+  } catch (error) {
+    setStatus(`删除集合失败：${error.message}`);
   }
 }
 
