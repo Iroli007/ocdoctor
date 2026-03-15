@@ -18,6 +18,7 @@ from tcm_study_app.api import (
 )
 from tcm_study_app.config import settings
 from tcm_study_app.db import init_db
+from tcm_study_app.services import seed_demo_content_if_needed
 
 FRONTEND_DIR = Path(__file__).resolve().parents[3] / "frontend"
 
@@ -27,7 +28,10 @@ async def lifespan(app: FastAPI):
     """Application lifespan handler."""
     # Startup
     init_db()
+    seeded_count = seed_demo_content_if_needed()
     print("Database initialized")
+    if seeded_count:
+        print(f"Seeded {seeded_count} demo collections")
     yield
     # Shutdown
     print("Application shutting down")

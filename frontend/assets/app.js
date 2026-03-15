@@ -60,6 +60,29 @@ function updateCounters() {
   document.getElementById("quiz-count").textContent = state.quizzes.length;
 }
 
+function setButtonBusy(button, isBusy, busyLabel) {
+  if (!button) {
+    return;
+  }
+
+  if (!button.dataset.defaultLabel) {
+    button.dataset.defaultLabel = button.textContent;
+  }
+
+  button.disabled = isBusy;
+  button.textContent = isBusy ? busyLabel : button.dataset.defaultLabel;
+}
+
+function upsertCollection(collection) {
+  const existingIndex = state.collections.findIndex((item) => item.id === collection.id);
+  if (existingIndex >= 0) {
+    state.collections[existingIndex] = collection;
+    return;
+  }
+
+  state.collections = [collection, ...state.collections];
+}
+
 function syncCollectionSelects() {
   const selects = [
     document.getElementById("collection-select"),
@@ -233,20 +256,42 @@ async function refreshActiveCollection() {
 
 async function createCollection(event) {
   event.preventDefault();
-  const form = new FormData(event.currentTarget);
+  const formElement = event.currentTarget;
+  const submitButton = formElement.querySelector('button[type="submit"]');
+  const form = new FormData(formElement);
   const payload = Object.fromEntries(form.entries());
   payload.user_id = 1;
 
-  const collection = await api("/api/collections", {
-    method: "POST",
-    body: JSON.stringify(payload),
-  });
+  try {
+    setButtonBusy(submitButton, true, "创建中...");
+    setStatus("正在创建集合...");
 
-  state.activeCollectionId = collection.id;
-  event.currentTarget.reset();
-  await loadCollections();
-  await refreshActiveCollection();
-  setStatus(`已创建集合：${collection.title}`);
+    const collection = await api("/api/collections", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+
+    upsertCollection(collection);
+    state.activeCollectionId = collection.id;
+    state.cards = [];
+    state.quizzes = [];
+
+    formElement.reset();
+    syncCollectionSelects();
+    renderCollections();
+    renderCards();
+    renderQuizzes();
+    updateCounters();
+    setStatus(`已创建集合：${collection.title}`);
+
+    // Re-sync from the backend in case ordering or derived fields changed.
+    await loadCollections();
+    await refreshActiveCollection();
+  } catch (error) {
+    setStatus(`创建集合失败：${error.message}`);
+  } finally {
+    setButtonBusy(submitButton, false, "创建中...");
+  }
 }
 
 async function importTextAndGenerate(event) {
