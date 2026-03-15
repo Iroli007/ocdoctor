@@ -45,9 +45,11 @@ textarea {
 }
 
 .workspace-brand-mark {
-  width: 28px;
-  height: 28px;
+  width: 36px;
+  height: 36px;
   flex: 0 0 auto;
+  border-radius: 10px;
+  object-fit: cover;
 }
 
 .workspace-brand-name {
