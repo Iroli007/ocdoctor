@@ -89,7 +89,12 @@ def seed_demo_content_if_needed() -> int:
 
 
 def seed_demo_content(db: Session) -> int:
-    """Seed demo content into the database without duplicating demo sets."""
+    """Seed demo content into the database without duplicating demo sets.
+
+    Uses a skip-if-exists strategy: if demo collections already have
+    documents, the seed is skipped entirely to avoid duplicate content
+    caused by concurrent Vercel cold starts.
+    """
     user = db.get(User, DEMO_USER_ID)
     if not user:
         user = User(
@@ -100,17 +105,27 @@ def seed_demo_content(db: Session) -> int:
         db.add(user)
         db.flush()
 
+    _remove_legacy_demo_collections(db, user.id)
+
     created_collections = 0
     library = DocumentLibrary(db)
     generator = CardGenerator(db)
-    _remove_legacy_demo_collections(db, user.id)
 
     for collection_data in DEMO_COLLECTIONS:
         collection, created = _get_or_create_demo_collection(db, user.id, collection_data)
         if created:
             created_collections += 1
 
-        _reset_collection_content(db, collection.id)
+        # Skip seeding if collection already has documents (prevents
+        # duplicate content from concurrent cold starts).
+        existing_docs = (
+            db.query(SourceDocument)
+            .filter(SourceDocument.collection_id == collection.id)
+            .count()
+        )
+        if existing_docs > 0:
+            continue
+
         document = library.import_text_document(collection.id, collection_data["text"])
         document.type = "pdf"
         document.image_url = collection_data["document_name"]
