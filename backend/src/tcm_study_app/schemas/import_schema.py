@@ -14,6 +14,8 @@ class ImportTextResponse(BaseModel):
 
     document_id: int
     status: str
+    chunk_count: int = 0
+    page_count: int = 0
 
 
 class ImportImageRequest(BaseModel):
@@ -29,6 +31,15 @@ class ImportImageResponse(BaseModel):
     document_id: int
     ocr_text: str | None = None
     status: str
+
+
+class ImportPdfResponse(BaseModel):
+    """Response schema for importing PDF."""
+
+    document_id: int
+    status: str
+    chunk_count: int
+    page_count: int
 
 
 class OCRResultRequest(BaseModel):

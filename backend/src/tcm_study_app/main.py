@@ -10,11 +10,11 @@ from fastapi.staticfiles import StaticFiles
 from tcm_study_app.api import (
     cards_router,
     collections_router,
+    documents_router,
     health_router,
     import_router,
-    quiz_router,
-    review_router,
     subjects_router,
+    templates_router,
 )
 from tcm_study_app.config import settings
 from tcm_study_app.db import init_db
@@ -56,11 +56,11 @@ app.add_middleware(
 # Include routers
 app.include_router(health_router)
 app.include_router(subjects_router)
+app.include_router(templates_router)
 app.include_router(collections_router)
 app.include_router(import_router)
+app.include_router(documents_router)
 app.include_router(cards_router)
-app.include_router(quiz_router)
-app.include_router(review_router)
 
 app.mount("/assets", StaticFiles(directory=FRONTEND_DIR / "assets"), name="assets")
 

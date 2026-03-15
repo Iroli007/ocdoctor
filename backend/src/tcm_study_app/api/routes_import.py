@@ -1,95 +1,55 @@
-"""Import routes."""
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+"""Document import routes."""
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
 from tcm_study_app.db import get_db
-from tcm_study_app.models import SourceDocument, StudyCollection
-from tcm_study_app.schemas import (
-    ImportImageResponse,
-    ImportTextRequest,
-    ImportTextResponse,
-    OCRResultRequest,
-)
-from tcm_study_app.services import ocr_service
+from tcm_study_app.schemas import ImportPdfResponse, ImportTextRequest, ImportTextResponse
+from tcm_study_app.services import create_document_library
 
 router = APIRouter(prefix="/api/import", tags=["import"])
 
 
 @router.post("/text", response_model=ImportTextResponse)
 async def import_text(request: ImportTextRequest, db: Session = Depends(get_db)):
-    """Import text content."""
-    # Verify collection exists
-    collection = db.get(StudyCollection, request.collection_id)
-    if not collection:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Collection {request.collection_id} not found",
-        )
+    """Import plain text into the knowledge library."""
+    library = create_document_library(db)
+    try:
+        document = library.import_text_document(request.collection_id, request.text)
+    except ValueError as exc:
+        message = str(exc)
+        status_code = 404 if "not found" in message.lower() else 400
+        raise HTTPException(status_code=status_code, detail=message) from exc
 
-    # Create source document
-    doc = SourceDocument(
-        collection_id=request.collection_id,
-        type="text",
-        raw_text=request.text,
-        status="pending",
+    return ImportTextResponse(
+        document_id=document.id,
+        status=document.status,
+        chunk_count=len(document.chunks),
+        page_count=max((chunk.page_number for chunk in document.chunks), default=0),
     )
-    db.add(doc)
-    db.commit()
-    db.refresh(doc)
-
-    return ImportTextResponse(document_id=doc.id, status=doc.status)
 
 
-@router.post("/image", response_model=ImportImageResponse)
-async def import_image(
-    collection_id: int,
+@router.post("/pdf", response_model=ImportPdfResponse)
+async def import_pdf(
+    collection_id: int = Form(...),
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
 ):
-    """Upload image and perform OCR."""
-    # Verify collection exists
-    collection = db.get(StudyCollection, collection_id)
-    if not collection:
-        raise HTTPException(status_code=404, detail=f"Collection {collection_id} not found")
+    """Import a PDF and build document chunks for later card generation."""
+    if not file.filename or not file.filename.lower().endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="Please upload a PDF file")
 
-    # For MVP, just save the file reference
-    # TODO: Actually save the file and run OCR
-    image_path = f"/tmp/{file.filename}"
-
-    # Save uploaded file
     content = await file.read()
-    with open(image_path, "wb") as f:
-        f.write(content)
+    library = create_document_library(db)
+    try:
+        document = library.import_pdf_document(collection_id, file.filename, content)
+    except ValueError as exc:
+        message = str(exc)
+        status_code = 404 if "not found" in message.lower() else 400
+        raise HTTPException(status_code=status_code, detail=message) from exc
 
-    # Run OCR
-    ocr_text = ocr_service.extract_text_from_image(image_path)
-
-    # Create source document
-    doc = SourceDocument(
-        collection_id=collection_id,
-        type="image",
-        image_url=image_path,
-        ocr_text=ocr_text,
-        status="pending",
+    return ImportPdfResponse(
+        document_id=document.id,
+        status=document.status,
+        chunk_count=len(document.chunks),
+        page_count=max((chunk.page_number for chunk in document.chunks), default=0),
     )
-    db.add(doc)
-    db.commit()
-    db.refresh(doc)
-
-    return ImportImageResponse(
-        document_id=doc.id, ocr_text=doc.ocr_text, status=doc.status
-    )
-
-
-@router.post("/ocr/correct")
-async def correct_ocr(request: OCRResultRequest, db: Session = Depends(get_db)):
-    """Submit corrected OCR text."""
-    doc = db.get(SourceDocument, request.document_id)
-    if not doc:
-        raise HTTPException(status_code=404, detail=f"Document {request.document_id} not found")
-
-    doc.ocr_text = request.corrected_text
-    db.commit()
-    db.refresh(doc)
-
-    return {"status": "ok", "document_id": doc.id}

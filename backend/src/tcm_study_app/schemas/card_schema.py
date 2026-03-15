@@ -57,12 +57,16 @@ class KnowledgeCardResponse(BaseModel):
 
     id: int
     title: str
+    template_key: str
     subject: str
     subject_key: str
     subject_display_name: str
     category: str
+    source_document_id: int | None = None
+    source_document_name: str | None = None
     raw_excerpt: str | None = None
     normalized_content: dict[str, Any] | None = None
+    citations: list["CardCitationResponse"]
     formula_card: FormulaCardData | None = None
     acupuncture_card: AcupunctureCardData | None = None
     warm_disease_card: WarmDiseaseCardData | None = None
@@ -73,6 +77,7 @@ class GenerateCardsRequest(BaseModel):
     """Request schema for generating cards from document."""
 
     document_id: int
+    template_key: str
 
 
 class GenerateCardsResponse(BaseModel):
@@ -88,3 +93,15 @@ class SubjectResponse(BaseModel):
     key: str
     display_name: str
     entity_label: str
+
+
+class CardCitationResponse(BaseModel):
+    """Response schema for a card citation."""
+
+    id: int
+    page_number: int
+    quote: str
+    document_name: str
+
+
+KnowledgeCardResponse.model_rebuild()

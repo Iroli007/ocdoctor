@@ -35,3 +35,13 @@ class SourceDocument(Base):
     knowledge_cards: Mapped[list["KnowledgeCard"]] = relationship(
         "KnowledgeCard", back_populates="source_document"
     )
+    chunks: Mapped[list["DocumentChunk"]] = relationship(
+        "DocumentChunk",
+        back_populates="source_document",
+        cascade="all, delete-orphan",
+    )
+    citations: Mapped[list["CardCitation"]] = relationship(
+        "CardCitation",
+        back_populates="source_document",
+        cascade="all, delete-orphan",
+    )

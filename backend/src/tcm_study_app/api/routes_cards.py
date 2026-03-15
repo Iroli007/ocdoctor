@@ -1,5 +1,6 @@
 """Card routes."""
 import json
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
@@ -9,6 +10,7 @@ from tcm_study_app.db import get_db
 from tcm_study_app.models import KnowledgeCard, StudyCollection
 from tcm_study_app.schemas import (
     AcupunctureCardData,
+    CardCitationResponse,
     FormulaCardData,
     GenerateCardsRequest,
     GenerateCardsResponse,
@@ -62,21 +64,44 @@ def _serialize_card(card: KnowledgeCard) -> KnowledgeCardResponse:
 
     subject = get_subject_definition(card.collection.subject if card.collection else None)
     normalized_content = None
+    template_key = card.category
     if card.normalized_content_json:
         try:
             normalized_content = json.loads(card.normalized_content_json)
+            template_key = normalized_content.get("template_key", card.category)
         except json.JSONDecodeError:
             normalized_content = None
+
+    source_document_name = None
+    if card.source_document:
+        source_document_name = Path(
+            card.source_document.image_url or f"文档-{card.source_document.id}"
+        ).name
 
     return KnowledgeCardResponse(
         id=card.id,
         title=card.title,
+        template_key=template_key,
         subject=subject.display_name,
         subject_key=subject.key,
         subject_display_name=subject.display_name,
         category=card.category,
+        source_document_id=card.source_document_id,
+        source_document_name=source_document_name,
         raw_excerpt=card.raw_excerpt,
         normalized_content=normalized_content,
+        citations=[
+            CardCitationResponse(
+                id=citation.id,
+                page_number=citation.page_number,
+                quote=citation.quote,
+                document_name=Path(
+                    citation.source_document.image_url
+                    or f"文档-{citation.source_document_id}"
+                ).name,
+            )
+            for citation in card.citations
+        ],
         formula_card=formula_data,
         acupuncture_card=acupuncture_data,
         warm_disease_card=warm_disease_data,
@@ -89,7 +114,10 @@ async def generate_cards(request: GenerateCardsRequest, db: Session = Depends(ge
     """Generate knowledge cards from a document."""
     generator = create_card_generator(db)
     try:
-        cards = generator.generate_cards_from_document(request.document_id)
+        cards = generator.generate_cards_from_document(
+            request.document_id,
+            request.template_key,
+        )
     except ValueError as exc:
         message = str(exc)
         status_code = 404 if "not found" in message.lower() else 400
@@ -113,6 +141,7 @@ async def get_cards(
     cards = (
         db.query(KnowledgeCard)
         .filter(KnowledgeCard.collection_id == collection_id)
+        .order_by(KnowledgeCard.created_at.desc())
         .all()
     )
 

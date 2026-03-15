@@ -123,4 +123,4 @@ def get_subject_definition(subject: str | None) -> SubjectDefinition:
 
 def list_subject_definitions() -> list[SubjectDefinition]:
     """Return supported subjects in stable display order."""
-    return [SUBJECTS["formula"], SUBJECTS["acupuncture"], SUBJECTS["warm_disease"]]
+    return [SUBJECTS["warm_disease"], SUBJECTS["acupuncture"]]

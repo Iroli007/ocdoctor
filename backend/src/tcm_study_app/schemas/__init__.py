@@ -1,6 +1,7 @@
 """Schemas package."""
 from tcm_study_app.schemas.card_schema import (
     AcupunctureCardData,
+    CardCitationResponse,
     FormulaCardData,
     GenerateCardsRequest,
     GenerateCardsResponse,
@@ -13,9 +14,17 @@ from tcm_study_app.schemas.collection_schema import (
     CollectionCreateRequest,
     CollectionResponse,
 )
+from tcm_study_app.schemas.document_schema import (
+    CardTemplateResponse,
+    CollectionExportResponse,
+    DocumentChunkResponse,
+    DocumentDetailResponse,
+    DocumentResponse,
+)
 from tcm_study_app.schemas.import_schema import (
     ImportImageRequest,
     ImportImageResponse,
+    ImportPdfResponse,
     ImportTextRequest,
     ImportTextResponse,
     OCRResultRequest,
@@ -41,12 +50,14 @@ from tcm_study_app.schemas.review_schema import (
 __all__ = [
     "ImportTextRequest",
     "ImportTextResponse",
+    "ImportPdfResponse",
     "ImportImageRequest",
     "ImportImageResponse",
     "OCRResultRequest",
     "FormulaCardData",
     "AcupunctureCardData",
     "WarmDiseaseCardData",
+    "CardCitationResponse",
     "GenerateCardsRequest",
     "GenerateCardsResponse",
     "KnowledgeCardCreate",
@@ -54,6 +65,11 @@ __all__ = [
     "SubjectResponse",
     "CollectionCreateRequest",
     "CollectionResponse",
+    "DocumentChunkResponse",
+    "DocumentResponse",
+    "DocumentDetailResponse",
+    "CardTemplateResponse",
+    "CollectionExportResponse",
     "ComparisonPoint",
     "GenerateComparisonRequest",
     "ComparisonItemResponse",

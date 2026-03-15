@@ -8,6 +8,10 @@ from tcm_study_app.services.demo_seed import (
     seed_demo_content,
     seed_demo_content_if_needed,
 )
+from tcm_study_app.services.document_library import (
+    DocumentLibrary,
+    create_document_library,
+)
 from tcm_study_app.services.llm_service import LLMService, llm_service
 from tcm_study_app.services.ocr_service import OCRService, ocr_service
 from tcm_study_app.services.quiz_generator import QuizGenerator, create_quiz_generator
@@ -24,6 +28,8 @@ __all__ = [
     "create_comparison_generator",
     "seed_demo_content",
     "seed_demo_content_if_needed",
+    "DocumentLibrary",
+    "create_document_library",
     "QuizGenerator",
     "create_quiz_generator",
     "ReviewService",

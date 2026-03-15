@@ -58,3 +58,8 @@ class KnowledgeCard(Base):
         cascade="all, delete-orphan",
         single_parent=True,
     )
+    citations: Mapped[list["CardCitation"]] = relationship(
+        "CardCitation",
+        back_populates="knowledge_card",
+        cascade="all, delete-orphan",
+    )
