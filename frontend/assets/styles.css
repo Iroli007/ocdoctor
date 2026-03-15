@@ -47,22 +47,20 @@ textarea {
 .brand {
   display: flex;
   gap: 14px;
-  align-items: flex-start;
+  align-items: center;
   margin-bottom: 28px;
 }
 
 .brand-mark {
-  width: 54px;
-  height: 54px;
+  width: 64px;
+  height: 64px;
   flex: 0 0 auto;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 18px;
-  background: linear-gradient(135deg, #111827, #1f6feb);
-  color: white;
-  font-family: "Iowan Old Style", "Palatino Linotype", "Songti SC", serif;
-  font-size: 1.35rem;
+}
+
+.brand-mark svg {
+  display: block;
+  width: 100%;
+  height: 100%;
 }
 
 .eyebrow,
@@ -72,6 +70,13 @@ textarea {
   font-size: 0.74rem;
   letter-spacing: 0.12em;
   text-transform: uppercase;
+}
+
+.brand-name {
+  margin: 0;
+  color: #5f6978;
+  font-size: 1.15rem;
+  letter-spacing: 0.14em;
 }
 
 .brand h1,

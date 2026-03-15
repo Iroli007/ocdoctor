@@ -3,18 +3,33 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>OCDoctor · PDF 知识库</title>
+    <title>OCDoctor</title>
     <link rel="stylesheet" href="/assets/styles.css" />
   </head>
   <body>
     <div class="app-shell">
       <aside class="sidebar">
         <div class="brand">
-          <div class="brand-mark">OC</div>
+          <div class="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 64 64" role="img">
+              <defs>
+                <linearGradient id="brandGlow" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stop-color="#17305d" />
+                  <stop offset="100%" stop-color="#2f67d8" />
+                </linearGradient>
+              </defs>
+              <rect x="2" y="2" width="60" height="60" rx="20" fill="url(#brandGlow)" />
+              <g fill="none" stroke="#f6efe3" stroke-linecap="round" stroke-linejoin="round">
+                <path stroke-width="3.2" d="M23 21l-5-7m5 7l-8-1m18 1l-3-9m3 9l7-4m1 4l5-7m-5 7l8-1" />
+                <path stroke-width="2.6" d="M28 28c-5 1-9 5-9 11 0 9 7 14 13 14s13-5 13-14c0-6-4-10-9-11" />
+                <path stroke-width="2.6" d="M26 31c2 2 4 3 6 3s4-1 6-3" />
+                <path stroke-width="2.3" d="M26 43c1.5 2 3.7 3 6 3s4.5-1 6-3" />
+                <path stroke-width="2.2" d="M27 39h.01M37 39h.01" />
+              </g>
+            </svg>
+          </div>
           <div>
-            <p class="eyebrow">OCDoctor</p>
-            <h1>PDF 知识库</h1>
-            <p class="brand-copy">只保留温病学和针灸学，文档导入后直接按模板抽卡并回链原文。</p>
+            <p class="eyebrow brand-name">ocdoctor</p>
           </div>
         </div>
 
