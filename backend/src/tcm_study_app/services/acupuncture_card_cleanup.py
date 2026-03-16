@@ -19,6 +19,11 @@ _BLOCKED_NAME_EXACT = {
     "心",
     "次",
     "醒",
+    "足阳明",
+    "手太阴",
+    "小儿禁刺",
+    "小儿吐乳",
+    "肋间",
 }
 _BLOCKED_NAME_SUBSTRINGS = (
     "病",
@@ -41,6 +46,8 @@ _BLOCKED_NAME_SUBSTRINGS = (
     "各论",
     "腧穴",
     "喻穴",
+    "禁刺",
+    "吐乳",
 )
 _OCR_NAME_CORRECTIONS = {
     "瘦脉": "瘈脉",
