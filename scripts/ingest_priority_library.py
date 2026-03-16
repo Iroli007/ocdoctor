@@ -156,6 +156,7 @@ def main() -> int:
                 render_scale=args.render_scale,
                 min_char_count=args.min_char_count,
                 blank_dark_ratio=args.blank_dark_ratio,
+                template_keys=suggested_templates,
             )
             cache_path.write_text(json.dumps(pages, ensure_ascii=False), encoding="utf-8")
             print(f"完成 OCR 预处理: {pdf_path.name} ({len(pages)} 页保留)")
@@ -239,6 +240,11 @@ def _suggest_templates(file_name: str, subject_key: str) -> list[str]:
         if re.search(r"经络腧穴各论|手太阴肺经|手阳明大肠经|腧穴", file_name):
             return ["acupoint_foundation", "acupoint_review"]
         if re.search(
+            r"腧穴总论|井荥输原经合穴|刺灸法总论|刺灸法各论|治疗总论|定位法|治疗原则|针灸处方|特定穴",
+            file_name,
+        ):
+            return ["theory_review"]
+        if re.search(
             r"针灸临床诊治思维|治疗总论|病症|病证|疼症|心脑病症|肺系病症|肝胆脾胃病症|肾膀胱病症|气血津液病症|皮肤外科病症|妇儿科病症|五官病症|其他病症",
             file_name,
         ):
@@ -261,6 +267,7 @@ def _extract_relevant_pages(
     render_scale: float,
     min_char_count: int,
     blank_dark_ratio: float,
+    template_keys: list[str],
 ) -> list[dict[str, object]]:
     """OCR only pages that look non-blank and keep pages likely to be useful."""
     document = fitz_module.open(str(pdf_path))
@@ -289,6 +296,7 @@ def _extract_relevant_pages(
                 subject_key=subject_key,
                 file_name=pdf_path.name,
                 min_char_count=min_char_count,
+                template_keys=template_keys,
             ):
                 continue
             kept_pages.append({"page_number": page_number, "text": text})
@@ -315,6 +323,7 @@ def _is_relevant_page_text(
     subject_key: str,
     file_name: str,
     min_char_count: int,
+    template_keys: list[str],
 ) -> bool:
     """Keep pages likely to help card generation and drop obvious noise."""
     compact = re.sub(r"\s+", " ", text).strip()
@@ -322,7 +331,8 @@ def _is_relevant_page_text(
         return False
 
     if subject_key == "acupuncture":
-        if "clinical_treatment" in " ".join(_suggest_templates(file_name, subject_key)):
+        active_templates = template_keys or _suggest_templates(file_name, subject_key)
+        if "clinical_treatment" in active_templates:
             treatment_keywords = (
                 "治法",
                 "治则",
@@ -374,6 +384,43 @@ def _is_relevant_page_text(
             if has_treatment and has_disease:
                 return True
             return len(compact) >= max(min_char_count, 220) and has_treatment
+        if "theory_review" in active_templates:
+            strong_keywords = (
+                "定义",
+                "概念",
+                "原则",
+                "作用",
+                "特点",
+                "方法",
+                "内容",
+                "定位法",
+                "取穴",
+                "配穴",
+                "针灸处方",
+                "特定穴",
+                "五输穴",
+                "原穴",
+                "络穴",
+                "募穴",
+                "下合穴",
+                "八会穴",
+                "郄穴",
+                "交会穴",
+                "毫针",
+                "灸法",
+                "拔罐",
+                "耳针",
+                "头针",
+                "电针",
+                "临床应用",
+                "注意事项",
+            )
+            noise_keywords = ("目录", "编写说明", "前言", "参考文献", "版权页")
+            if any(keyword in compact for keyword in noise_keywords):
+                return False
+            if any(keyword in compact for keyword in strong_keywords):
+                return True
+            return len(compact) >= max(min_char_count, 160)
         else:
             strong_keywords = (
                 "定位",

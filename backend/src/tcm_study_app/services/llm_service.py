@@ -134,6 +134,33 @@ class LLMService:
 
         return self._mock_extract_acupuncture_clinical(text)
 
+    def extract_acupuncture_theory_card(self, text: str) -> dict[str, Any]:
+        """Extract acupuncture theory/high-frequency review card data from raw text."""
+        system_prompt = """你是一个中医针灸学助手。请从总论教材文本中提取高频复习卡，返回纯JSON格式。"""
+
+        user_prompt = f"""从以下文本中提取针灸学总论高频卡信息：
+
+{text}
+
+请返回以下格式的JSON（只返回JSON，不要其他内容）：
+{{
+  "concept_name": "概念或考点名称",
+  "category": "所属类别，如腧穴总论/刺灸法总论/治疗总论",
+  "core_points": "定义、原则、特点或核心内容",
+  "exam_focus": "期末高频考点或易混点(如果没有则null)"
+}}"""
+
+        if self.anthropic_api_key:
+            try:
+                result = self._call_anthropic(system_prompt, user_prompt)
+                json_match = re.search(r"\{.*\}", result, re.DOTALL)
+                if json_match:
+                    return json.loads(json_match.group())
+            except Exception as e:
+                print(f"Anthropic API error: {e}")
+
+        return self._mock_extract_acupuncture_theory(text)
+
     def extract_warm_disease_card(self, text: str) -> dict[str, Any]:
         """Extract warm disease card data from raw text."""
         system_prompt = """你是一个温病学助手。请从文本中提取证候信息，返回纯JSON格式。"""
@@ -468,6 +495,63 @@ class LLMService:
             },
             source_text=text,
         )
+
+    def _mock_extract_acupuncture_theory(self, text: str) -> dict[str, Any]:
+        """Mock extraction for acupuncture theory/general-review cards."""
+        compact_text = re.sub(r"\s+", " ", text).strip()
+        first_line = next((line.strip() for line in text.splitlines() if line.strip()), compact_text[:24])
+
+        concept_match = re.search(
+            r"(?:^|[。；\s])((?:腧穴的)?定位法|骨度分寸定位法|手指同身寸定位法|自然标志定位法|"
+            r"取穴原则|配穴原则|针灸治疗原则|针灸治疗作用|针灸处方|特定穴的临床应用|"
+            r"五输穴|原穴|络穴|募穴|下合穴|八会穴|郄穴|八脉交会穴|交会穴|"
+            r"毫针刺法|灸法|拔罐法|耳针法|头针法|电针法|针刺注意事项)",
+            compact_text,
+        )
+        if not concept_match:
+            concept_match = re.search(
+                r"(第[一二三四五六七八九十]+章)?\s*([\u4e00-\u9fa5]{2,12}(?:定位法|原则|作用|特点|处方|应用|刺法|灸法|疗法|穴))",
+                first_line,
+            )
+
+        category = None
+        if any(token in compact_text for token in ("腧穴总论", "定位法", "取穴")):
+            category = "腧穴总论"
+        elif any(token in compact_text for token in ("刺灸法", "毫针", "灸法", "拔罐", "耳针", "头针", "电针")):
+            category = "刺灸法总论"
+        elif any(token in compact_text for token in ("治疗作用", "治疗原则", "针灸处方", "特定穴")):
+            category = "治疗总论"
+
+        core_points = self._extract_generic_labeled_segment(
+            text,
+            ("定义", "概念", "特点", "作用", "原则", "方法", "内容", "定位", "应用"),
+        )
+        if not core_points:
+            core_points = self._extract_first_sentence_after_label(
+                compact_text,
+                ("定义", "概念", "特点", "作用", "原则", "方法", "内容", "定位", "应用"),
+            )
+        if not core_points:
+            sentences = re.split(r"[。；;]", compact_text)
+            informative = [sentence.strip() for sentence in sentences if len(sentence.strip()) >= 8]
+            core_points = "；".join(informative[:2]) if informative else None
+
+        exam_focus = self._extract_generic_labeled_segment(
+            text,
+            ("主治", "适应证", "临床应用", "注意事项", "记忆要点", "考试要点"),
+        )
+        if not exam_focus:
+            exam_focus = self._extract_first_sentence_after_label(
+                compact_text,
+                ("适应证", "临床应用", "注意事项", "记忆要点", "考试要点"),
+            )
+
+        return {
+            "concept_name": concept_match.group(concept_match.lastindex or 1) if concept_match else first_line[:12],
+            "category": category,
+            "core_points": core_points,
+            "exam_focus": exam_focus,
+        }
 
     def _mock_generate_comparison(
         self,

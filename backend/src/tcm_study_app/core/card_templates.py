@@ -52,6 +52,19 @@ CARD_TEMPLATES: dict[str, list[CardTemplate]] = {
             ),
             minimum_fields=3,
         ),
+        CardTemplate(
+            key="theory_review",
+            subject_key="acupuncture",
+            label="总论高频卡",
+            description="适合从腧穴总论、刺灸法总论、治疗总论中抽取定义、原则和考试高频要点。",
+            fields=(
+                "concept_name",
+                "category",
+                "core_points",
+                "exam_focus",
+            ),
+            minimum_fields=3,
+        ),
     ],
     "warm_disease": [
         CardTemplate(

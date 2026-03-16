@@ -189,6 +189,42 @@ def test_template_generation_returns_cards_with_citations(client):
     assert payload["cards"][0]["source_document_name"] == "手动粘贴文本"
 
 
+def test_acupuncture_theory_template_generation_returns_cards(client):
+    """Theory review template should generate cards for high-frequency general chapters."""
+    collection = _create_collection(client, "针灸学·总论高频卡", "针灸学")
+    document_id = _import_text(
+        client,
+        collection["id"],
+        """
+针灸治疗原则
+定义：针灸治疗应遵循补虚泻实、清热温寒、治病求本等原则。
+特点：既要辨病，又要辨证，还要结合经络循行与腧穴特性。
+临床应用：期末常考配穴原则、补泻原则和局部与远部取穴结合。
+
+特定穴的临床应用
+概念：特定穴是十四经穴中具有特殊治疗作用和分类意义的一组腧穴。
+内容：包括五输穴、原穴、络穴、募穴、下合穴、八会穴、郄穴、八脉交会穴、交会穴等。
+考试要点：常考各种特定穴的分类、主治特点及配伍应用。
+        """.strip(),
+    )
+
+    response = client.post(
+        "/api/cards/generate",
+        json={
+            "document_id": document_id,
+            "template_key": "theory_review",
+        },
+    )
+    assert response.status_code == 200
+    payload = response.json()
+
+    assert payload["status"] == "generated"
+    assert len(payload["cards"]) >= 2
+    assert payload["cards"][0]["template_key"] == "theory_review"
+    assert payload["cards"][0]["normalized_content"]["concept_name"]
+    assert payload["cards"][0]["normalized_content"]["core_points"]
+
+
 def test_card_importance_persists(client):
     """Card importance should persist independently for each user."""
     collection = _create_collection(client, "温病学·卡片重要度", "温病学")

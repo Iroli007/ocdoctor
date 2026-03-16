@@ -176,6 +176,34 @@ class CardGenerator:
         """Keep chunks likely to contain extractable card content."""
         if subject_key == "acupuncture" and template_key == "clinical_treatment":
             keywords = ("病", "症", "治法", "处方", "取穴", "主穴", "配穴", "加减", "治疗")
+        elif subject_key == "acupuncture" and template_key == "theory_review":
+            keywords = (
+                "原则",
+                "作用",
+                "特点",
+                "定义",
+                "概念",
+                "定位法",
+                "取穴",
+                "配穴",
+                "特定穴",
+                "五输穴",
+                "原穴",
+                "络穴",
+                "募穴",
+                "下合穴",
+                "八会穴",
+                "郄穴",
+                "八脉交会穴",
+                "交会穴",
+                "毫针",
+                "灸法",
+                "拔罐",
+                "耳针",
+                "头针",
+                "电针",
+                "针灸处方",
+            )
         else:
             keywords = {
                 "acupuncture": ("主治", "定位", "刺灸法", "经络", "归经", "穴"),
@@ -278,6 +306,8 @@ class CardGenerator:
                 llm_service.extract_acupuncture_clinical_card(text),
                 source_text=text,
             )
+        if subject_key == "acupuncture" and template_key == "theory_review":
+            return llm_service.extract_acupuncture_theory_card(text)
         if subject_key == "acupuncture":
             return clean_acupuncture_card_payload(
                 llm_service.extract_acupuncture_card(text),
@@ -291,12 +321,16 @@ class CardGenerator:
         """Resolve the card title for a subject/template pair."""
         if subject.key == "acupuncture" and template_key == "clinical_treatment":
             return extracted.get("disease_name") or "未知病证"
+        if subject.key == "acupuncture" and template_key == "theory_review":
+            return extracted.get("concept_name") or "未知考点"
         return extracted.get(subject.title_field) or subject.default_title
 
     def _default_title(self, subject_key: str, template_key: str) -> str:
         """Return the placeholder title for the subject/template pair."""
         if subject_key == "acupuncture" and template_key == "clinical_treatment":
             return "未知病证"
+        if subject_key == "acupuncture" and template_key == "theory_review":
+            return "未知考点"
         return get_subject_definition(subject_key).default_title
 
     def _build_subject_record(
@@ -307,7 +341,7 @@ class CardGenerator:
         extracted: dict,
     ):
         """Create an optional typed record for templates that need one."""
-        if subject.key == "acupuncture" and template_key == "clinical_treatment":
+        if subject.key == "acupuncture" and template_key in {"clinical_treatment", "theory_review"}:
             return None
         return subject.build_record(knowledge_card_id, extracted)
 
@@ -327,6 +361,17 @@ class CardGenerator:
                 },
             )
             return is_valid_clinical_card_payload(cleaned)
+        if subject_key == "acupuncture" and template_key == "theory_review":
+            concept_name = (title or "").strip()
+            core_points = (extracted.get("core_points") or "").strip()
+            exam_focus = (extracted.get("exam_focus") or "").strip()
+            blocked_tokens = ("第", "附录", "目录", "前言", "参考文献")
+            return (
+                2 <= len(concept_name) <= 12
+                and not any(token in concept_name for token in blocked_tokens)
+                and len(core_points) >= 8
+                and (len(exam_focus) >= 4 or any(token in core_points for token in ("原则", "作用", "特点", "应用")))
+            )
         if subject_key == "acupuncture":
             cleaned = clean_acupuncture_card_payload(
                 {
