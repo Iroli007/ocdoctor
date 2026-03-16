@@ -200,6 +200,52 @@ button:disabled {
   gap: 4px;
 }
 
+.template-guide {
+  display: grid;
+}
+
+.template-guide-card {
+  display: grid;
+  gap: 10px;
+  padding: 14px 16px;
+  border: 1px solid rgba(31, 111, 235, 0.18);
+  border-radius: 16px;
+  background:
+    linear-gradient(135deg, rgba(31, 111, 235, 0.08), rgba(31, 111, 235, 0.02)),
+    var(--panel-soft);
+}
+
+.template-guide-card p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.template-guide-kicker {
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.template-guide-tags {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.template-guide-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(18, 20, 23, 0.06);
+  color: var(--ink);
+  font-size: 0.84rem;
+  font-weight: 600;
+}
+
 .template-list {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));

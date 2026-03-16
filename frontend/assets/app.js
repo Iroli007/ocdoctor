@@ -456,8 +456,12 @@ function renderWorkspaceHeader() {
 
 function renderTemplates() {
   const container = document.getElementById("template-list");
+  const guide = document.getElementById("template-guide");
   if (!state.templates.length) {
     container.innerHTML = '<div class="empty-inline">当前学科还没有可用模板。</div>';
+    if (guide) {
+      guide.innerHTML = "";
+    }
     return;
   }
 
@@ -479,6 +483,25 @@ function renderTemplates() {
       `,
     )
     .join("");
+
+  if (guide) {
+    const activeCollection = getActiveCollection();
+    if (activeCollection?.subject_key === "acupuncture") {
+      guide.innerHTML = `
+        <div class="template-guide-card">
+          <span class="template-guide-kicker">针灸学入口</span>
+          <div class="template-guide-tags">
+            <span class="template-guide-tag">经络腧穴</span>
+            <span class="template-guide-tag">刺灸技术</span>
+            <span class="template-guide-tag">针灸治疗</span>
+          </div>
+          <p>导入后的文档会先按篇章分流，再进入对应模板，不再把穴位、技术、病证混在一起抽卡。</p>
+        </div>
+      `;
+    } else {
+      guide.innerHTML = "";
+    }
+  }
 
   container.querySelectorAll("[data-template-key]").forEach((button) => {
     button.addEventListener("click", async () => {

@@ -46,6 +46,28 @@ ANTHROPIC_API_KEY=your_anthropic_key
 PYTHONPATH=backend/src python scripts/seed_demo_data.py
 ```
 
+如果你本地已经有旧版 `tcm_study.db`，这一步前建议先确认是否需要重建。
+
+原因：
+- 当前项目启动使用 `Base.metadata.create_all(...)`
+- 这会创建缺失的表，但不会给旧表自动补新列
+- 本轮针灸导入重构新增了 `source_documents.source_book_key`、`book_section` 等字段，以及多张新表
+
+如果你看到类似错误：
+
+```bash
+no such column: source_documents.source_book_key
+```
+
+本地开发建议直接重建 SQLite：
+
+```bash
+rm -f tcm_study.db
+PYTHONPATH=backend/src python scripts/seed_demo_data.py
+```
+
+如果你要保留旧数据，就需要手动做 SQLite 迁移。
+
 ### 5. 启动开发服务器
 
 ```bash

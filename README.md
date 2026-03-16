@@ -31,6 +31,20 @@ uv sync
 PYTHONPATH=backend/src python scripts/seed_demo_data.py
 ```
 
+如果你之前已经在本地跑过旧版本，当前 `create_all` 只会补新表，不会自动给旧 SQLite 表补新增列。
+这次针灸导入重构给 `source_documents` 等表加了新列，所以旧的 `tcm_study.db` 可能会报类似：
+
+- `no such column: source_documents.source_book_key`
+
+本地最简单的处理方式是直接重建：
+
+```bash
+rm -f tcm_study.db
+PYTHONPATH=backend/src python scripts/seed_demo_data.py
+```
+
+如果你不想删库，就需要自己做 SQLite 迁移，把新增列和新表补进去。
+
 ### 3. 启动服务
 
 ```bash
@@ -214,3 +228,19 @@ uv run --group ocr python scripts/import_scanned_pdf.py \
 This uses local PaddleOCR for recognition and then sends the page text to
 `POST /api/import/ocr-pages`, so the hosted app only receives plain OCR text and
 can still keep page-aware chunk citations.
+
+## 临床针灸学导入说明
+
+针灸学现在按《临床针灸学》三类结构组织：
+
+- 经络腧穴
+- 刺灸技术
+- 针灸治疗
+
+OCR 导入后会先进入结构化识别链路：
+
+- `OCRPage`
+- `OCRBlock`
+- `ParsedDocumentUnit`
+
+然后再生成对应卡片，而不是直接把整页 OCR 文本喂给抽卡逻辑。
