@@ -57,6 +57,7 @@ textarea {
   display: flex;
   gap: 14px;
   align-items: center;
+  flex-wrap: wrap;
 }
 
 .collection-switcher {
@@ -173,6 +174,7 @@ button:disabled {
   display: flex;
   align-items: center;
   gap: 16px;
+  flex-wrap: wrap;
 }
 
 .panel,
@@ -403,6 +405,11 @@ button:disabled {
   .workspace-header {
     flex-direction: row;
     align-items: center;
+    flex-wrap: wrap;
+  }
+
+  .workspace-branding {
+    flex-wrap: wrap;
   }
 
   .focus-card-top {
