@@ -43,14 +43,13 @@ textarea {
   display: flex;
   gap: 8px;
   align-items: center;
-  margin-bottom: 10px;
 }
 
 .workspace-brand-mark {
-  width: 36px;
-  height: 36px;
+  width: 44px;
+  height: 44px;
   flex: 0 0 auto;
-  border-radius: 10px;
+  border-radius: 12px;
   object-fit: cover;
 }
 
@@ -172,8 +171,9 @@ button:disabled {
 }
 
 .workspace-branding {
-  display: grid;
-  gap: 6px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
 }
 
 .panel,
