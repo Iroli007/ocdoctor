@@ -418,30 +418,39 @@ function renderTemplates() {
     .join("");
 
   container.querySelectorAll("[data-template-key]").forEach((button) => {
-    button.addEventListener("click", async () => {
-      state.activeTemplateKey = button.dataset.templateKey;
-      const userId = state.currentUserId || 1;
-      if (!state.cardsByTemplate[state.activeTemplateKey]) {
-        setStatus("正在切换模板...");
-        await fillCardPool(userId, state.activeTemplateKey, { force: true });
+    button.addEventListener("click", () => {
+      const newTemplateKey = button.dataset.templateKey;
+      if (newTemplateKey === state.activeTemplateKey) {
+        return; // 相同模板，不做处理
+      }
+
+      state.activeTemplateKey = newTemplateKey;
+
+      // 直接切换到已缓存的数据，不发起新请求
+      const cachedCards = state.cardsByTemplate[state.activeTemplateKey] || [];
+      const cachedPool = getTemplatePool(state.activeTemplateKey);
+
+      if (cachedCards.length > 0) {
+        // 有缓存数据，直接使用
+        state.cards = cachedCards;
+        const nextCard = cachedPool[0] || cachedCards[0];
+        state.activeCardId = nextCard?.id || null;
+        syncBestDocumentSelection();
       } else {
-        void fillCardPool(userId, state.activeTemplateKey, { minSize: CARD_POOL_SIZE });
+        // 无缓存，标记需要延迟加载
+        state.cards = [];
+        state.activeCardId = null;
+        // 延迟加载，在后台静默请求
+        setTimeout(() => {
+          const userId = state.currentUserId || 1;
+          fillCardPool(userId, state.activeTemplateKey, { minSize: 1 }).catch(() => {});
+        }, 0);
       }
-      state.cards = state.cardsByTemplate[state.activeTemplateKey] || [];
-      if (!state.cards.length) {
-        try {
-          await ensureCardsAvailableForTemplate(userId);
-        } catch (error) {
-          setStatus(`当前模板暂时没有可用卡片：${error.message}`);
-        }
-      }
-      const nextCard = getTemplatePool(state.activeTemplateKey)[0] || getTemplateCards(state.activeTemplateKey)[0];
-      state.activeCardId = nextCard?.id || null;
-      syncBestDocumentSelection();
+
       renderTemplates();
       renderCards();
       syncPoolStatus(state.activeTemplateKey);
-      setStatus(`已切换到${findTemplateLabel(state.activeTemplateKey)}。`);
+      setStatus(`已切换到${findTemplateLabel(state.activeTemplateKey)}。抽卡时将加载新数据。`);
     });
   });
 }
@@ -690,25 +699,39 @@ async function refreshWorkspace() {
     return;
   }
 
+  // 并行加载文档和模板
   const userId = state.currentUserId || 1;
-  state.documents = await loadDocumentsForActiveCollection();
-  state.templates = await api(`/api/templates?subject=${active.subject_key}`);
+  const [documents, templates] = await Promise.all([
+    loadDocumentsForActiveCollection(),
+    api(`/api/templates?subject=${active.subject_key}`),
+  ]);
+
+  state.documents = documents;
+  state.templates = templates;
 
   if (!state.templates.find((template) => template.key === state.activeTemplateKey)) {
     state.activeTemplateKey = state.templates[0]?.key || null;
   }
+
+  // 只初始化模板缓存结构，不立即请求卡片数据（懒加载）
   resetTemplateCardCache();
-  await fillCardPool(userId, state.activeTemplateKey, { force: true });
-  state.cards = state.cardsByTemplate[state.activeTemplateKey] || [];
-  const activeTemplateCards = getTemplateCards();
-  const bufferedCard = getTemplatePool(state.activeTemplateKey)[0];
-  state.activeCardId = bufferedCard?.id || activeTemplateCards[0]?.id || null;
+
+  // 选中最优文档（用于后续生成卡片）
   syncBestDocumentSelection();
+
+  // 启动定时轮询（后台补充卡池）
   startPoolPolling();
 
+  // 渲染 UI
   renderWorkspaceHeader();
   renderTemplates();
   renderCards();
+
+  // 懒加载：只预取第一个模板的少量卡片，让用户可以立即抽卡
+  if (state.activeTemplateKey) {
+    fillCardPool(userId, state.activeTemplateKey, { minSize: 3 }).catch(() => {});
+  }
+
   syncPoolStatus();
 }
 
