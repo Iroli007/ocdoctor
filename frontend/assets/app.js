@@ -233,6 +233,17 @@ function pickRandomItem(items) {
   return items[Math.floor(Math.random() * items.length)];
 }
 
+function buildWeightedPool(cards) {
+  const weighted = [];
+  for (const card of cards) {
+    const weight = Math.max(1, 1 + Number(card.importance_level || 0));
+    for (let index = 0; index < weight; index += 1) {
+      weighted.push(card);
+    }
+  }
+  return weighted;
+}
+
 function renderImportanceStars(card) {
   const current = Number(card.importance_level || 0);
   return Array.from({ length: 5 }, (_, index) => {
@@ -259,7 +270,7 @@ function getRandomDrawPool(templateKey = state.activeTemplateKey) {
   const cards = getTemplateCards(templateKey);
   const drawnIds = state.drawnCardIdsByTemplate[templateKey] || [];
   const unseenCards = cards.filter((card) => !drawnIds.includes(card.id));
-  return unseenCards.length ? unseenCards : cards;
+  return buildWeightedPool(unseenCards.length ? unseenCards : cards);
 }
 
 function getDocumentTemplateScore(document, templateKey, subjectKey) {

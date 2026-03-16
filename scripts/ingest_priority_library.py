@@ -239,7 +239,7 @@ def _suggest_templates(file_name: str, subject_key: str) -> list[str]:
         if re.search(r"经络腧穴各论|手太阴肺经|手阳明大肠经|腧穴", file_name):
             return ["acupoint_foundation", "acupoint_review"]
         if re.search(
-            r"针灸临床诊治思维|治疗总论|病症|疼症|心脑病症|肺系病症|肝胆脾胃病症|肾膀胱病症|气血津液病症|皮肤外科病症|妇儿科病症|五官病症|其他病症",
+            r"针灸临床诊治思维|治疗总论|病症|病证|疼症|心脑病症|肺系病症|肝胆脾胃病症|肾膀胱病症|气血津液病症|皮肤外科病症|妇儿科病症|五官病症|其他病症",
             file_name,
         ):
             return ["clinical_treatment"]
