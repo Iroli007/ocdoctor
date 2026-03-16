@@ -49,13 +49,23 @@ class CardGenerator:
             raise ValueError("Document has no parsed chunks")
 
         self._remove_existing_cards(document.id, template.key)
+        existing_title_keys = self._existing_title_keys(
+            collection_id=document.collection_id,
+            template_key=template.key,
+            exclude_document_id=document.id,
+        )
         generated_titles = set()
         generated_cards = []
 
         for unit in self._iter_extractable_units(subject.key, template.key, chunks):
             extracted = self._extract_card(subject.key, template.key, unit.content)
             title = self._resolve_title(subject, template.key, extracted)
-            if title == self._default_title(subject.key, template.key) or title in generated_titles:
+            title_key = self._normalize_title_key(title)
+            if (
+                title == self._default_title(subject.key, template.key)
+                or title in generated_titles
+                or title_key in existing_title_keys
+            ):
                 continue
             if not self._passes_subject_quality_gate(subject.key, template.key, title, extracted):
                 continue
@@ -96,6 +106,7 @@ class CardGenerator:
 
             generated_cards.append(knowledge_card)
             generated_titles.add(title)
+            existing_title_keys.add(title_key)
 
         if not generated_cards:
             raise ValueError("No cards could be generated from this document")
@@ -119,6 +130,38 @@ class CardGenerator:
         for card in existing_cards:
             self.db.delete(card)
         self.db.flush()
+
+    def _existing_title_keys(
+        self,
+        *,
+        collection_id: int,
+        template_key: str,
+        exclude_document_id: int,
+    ) -> set[str]:
+        """Load normalized title keys already present in the collection/template."""
+        cards = (
+            self.db.query(KnowledgeCard.title)
+            .filter(
+                KnowledgeCard.collection_id == collection_id,
+                KnowledgeCard.category == template_key,
+                KnowledgeCard.source_document_id != exclude_document_id,
+            )
+            .all()
+        )
+        return {
+            title_key
+            for (title,) in cards
+            if (title_key := self._normalize_title_key(title))
+        }
+
+    def _normalize_title_key(self, title: str | None) -> str:
+        """Normalize a card title for lightweight cross-document dedupe."""
+        if not title:
+            return ""
+        normalized = re.sub(r"\s+", "", title)
+        normalized = re.sub(r"[（(].*?[）)]", "", normalized)
+        normalized = re.sub(r"[^\u4e00-\u9fa5A-Za-z0-9]", "", normalized)
+        return normalized.lower()
 
     def _candidate_chunks(self, subject_key: str, template_key: str, chunks: list) -> list:
         """Keep chunks likely to contain extractable card content."""
@@ -268,8 +311,21 @@ class CardGenerator:
                 r"^血瘀证$",
                 r"^气滞证$",
                 r"^寒凝证$",
+                r"^按病症$",
+                r"^依病症$",
+                r"^共同症$",
+                r"^特征症$",
+                r"^其他病$",
+                r"^配穴",
+                r"病因辨证",
+                r"辨证",
+                r"常伴",
+                r"内镜",
+                r"上位神经中枢",
             )
             if any(re.search(pattern, title) for pattern in blocked_title_patterns):
+                return False
+            if len(title) > 14 or title.endswith("证"):
                 return False
             if not extracted.get("treatment_principle") or not extracted.get("acupoint_prescription"):
                 return False

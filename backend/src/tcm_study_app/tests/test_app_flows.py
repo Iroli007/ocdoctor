@@ -405,6 +405,54 @@ def test_clinical_acupuncture_template_generates_disease_cards(client):
     assert card["normalized_content"]["notes"] == "上肢麻木者加曲池、外关"
 
 
+def test_clinical_acupuncture_template_skips_duplicate_titles_across_documents(client):
+    """Same-title clinical cards should not duplicate across documents in one collection."""
+    collection = _create_collection(client, "针灸学·跨文档去重", "针灸学")
+    first_document_id = _import_text(
+        client,
+        collection["id"],
+        """
+第十章 疼症
+颈椎病
+治法：疏经通络，调和气血。
+处方：风池、颈夹脊、肩井、合谷。
+        """.strip(),
+    )
+    second_document_id = _import_text(
+        client,
+        collection["id"],
+        """
+第十一章 其他病症
+颈椎病
+治法：调和气血，通络止痛。
+处方：风池、夹脊、肩井。
+        """.strip(),
+    )
+
+    first_response = client.post(
+        "/api/cards/generate",
+        json={
+            "document_id": first_document_id,
+            "template_key": "clinical_treatment",
+        },
+    )
+    assert first_response.status_code == 200
+
+    second_response = client.post(
+        "/api/cards/generate",
+        json={
+            "document_id": second_document_id,
+            "template_key": "clinical_treatment",
+        },
+    )
+    assert second_response.status_code == 200
+
+    cards_response = client.get(f"/api/cards?collection_id={collection['id']}")
+    assert cards_response.status_code == 200
+    titles = [card["title"] for card in cards_response.json()]
+    assert titles.count("颈椎病") == 1
+
+
 def test_missing_collection_returns_http_friendly_404(client):
     """Import endpoints should return an explicit 404 when collections are missing."""
     response = client.post(
