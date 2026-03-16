@@ -21,6 +21,11 @@ from tcm_study_app.schemas import (
     WarmDiseaseCardData,
 )
 from tcm_study_app.services import create_card_generator
+from tcm_study_app.services.clinical_card_cleanup import (
+    clean_clinical_card_payload,
+    is_valid_clinical_card_payload,
+    normalize_clinical_title_key,
+)
 
 router = APIRouter(prefix="/api/cards", tags=["cards"])
 
@@ -67,9 +72,24 @@ def _get_importance(db: Session, user_id: int, card_id: int) -> int:
     return row.importance_level if row else 0
 
 
+def _clinical_source_text(card: KnowledgeCard) -> str:
+    """Build a best-effort source snippet for clinical card cleanup."""
+    parts = [card.raw_excerpt or ""]
+    parts.extend(citation.quote for citation in card.citations if citation.quote)
+    unique_parts: list[str] = []
+    seen_parts: set[str] = set()
+    for part in parts:
+        normalized = part.strip()
+        if not normalized or normalized in seen_parts:
+            continue
+        seen_parts.add(normalized)
+        unique_parts.append(normalized)
+    return "\n\n".join(unique_parts)
+
+
 def _serialize_card(
     card: KnowledgeCard, db: Session, user_id: int
-) -> KnowledgeCardResponse:
+) -> KnowledgeCardResponse | None:
     """Convert a model into the API response shape."""
     formula_data = None
     acupuncture_data = None
@@ -112,6 +132,7 @@ def _serialize_card(
     subject = get_subject_definition(card.collection.subject if card.collection else None)
     normalized_content, template_key = _load_normalized_content(card)
     importance_level = _get_importance(db, user_id, card.id)
+    title = card.title
 
     source_document_name = None
     if card.source_document:
@@ -119,9 +140,28 @@ def _serialize_card(
             card.source_document.image_url or f"文档-{card.source_document.id}"
         ).name
 
+    if template_key == "clinical_treatment":
+        cleaned = clean_clinical_card_payload(
+            {
+                "disease_name": (normalized_content or {}).get("disease_name") or card.title,
+                "treatment_principle": (normalized_content or {}).get("treatment_principle"),
+                "acupoint_prescription": (normalized_content or {}).get("acupoint_prescription"),
+                "notes": (normalized_content or {}).get("notes"),
+            },
+            source_text=_clinical_source_text(card),
+        )
+        if not is_valid_clinical_card_payload(cleaned):
+            return None
+        title = cleaned["disease_name"]
+        normalized_content = {
+            "template_key": template_key,
+            "template_label": (normalized_content or {}).get("template_label", "病证治疗卡"),
+            **cleaned,
+        }
+
     return KnowledgeCardResponse(
         id=card.id,
-        title=card.title,
+        title=title,
         template_key=template_key,
         subject=subject.display_name,
         subject_key=subject.key,
@@ -149,6 +189,29 @@ def _serialize_card(
         warm_disease_card=warm_disease_data,
         created_at=card.created_at,
     )
+
+
+def _serialize_card_list(
+    cards: list[KnowledgeCard],
+    db: Session,
+    user_id: int,
+) -> list[KnowledgeCardResponse]:
+    """Serialize cards and dedupe cleaned clinical titles."""
+    results: list[KnowledgeCardResponse] = []
+    seen_clinical_titles: set[str] = set()
+
+    for card in cards:
+        serialized = _serialize_card(card, db, user_id)
+        if serialized is None:
+            continue
+        if serialized.template_key == "clinical_treatment":
+            title_key = normalize_clinical_title_key(serialized.title)
+            if title_key in seen_clinical_titles:
+                continue
+            seen_clinical_titles.add(title_key)
+        results.append(serialized)
+
+    return results
 
 
 def migrate_importance_from_json_if_needed(db: Session) -> None:
@@ -200,8 +263,9 @@ async def generate_cards(
         message = str(exc)
         status_code = 404 if "not found" in message.lower() else 400
         raise HTTPException(status_code=status_code, detail=message) from exc
+    serialized_cards = _serialize_card_list(cards, db, user_id)
     return GenerateCardsResponse(
-        cards=[_serialize_card(card, db, user_id) for card in cards],
+        cards=serialized_cards,
         status="generated",
     )
 
@@ -236,7 +300,10 @@ async def set_card_importance(
 
     db.commit()
     db.refresh(card)
-    return _serialize_card(card, db, user_id)
+    serialized = _serialize_card(card, db, user_id)
+    if serialized is None:
+        raise HTTPException(status_code=404, detail=f"Card {card_id} is no longer available")
+    return serialized
 
 
 @router.get("", response_model=list[KnowledgeCardResponse])
@@ -259,12 +326,17 @@ async def get_cards(
     query = db.query(KnowledgeCard).filter(KnowledgeCard.collection_id == collection_id)
     if template_key:
         query = query.filter(KnowledgeCard.category == template_key)
-    query = query.order_by(KnowledgeCard.created_at.desc()).offset(offset)
+    query = query.order_by(KnowledgeCard.created_at.desc())
+    if template_key == "clinical_treatment":
+        cards = query.all()
+        cleaned_cards = _serialize_card_list(cards, db, user_id)
+        return cleaned_cards[offset:] if limit is None else cleaned_cards[offset : offset + limit]
+
+    query = query.offset(offset)
     if limit is not None:
         query = query.limit(limit)
     cards = query.all()
-
-    return [_serialize_card(card, db, user_id) for card in cards]
+    return _serialize_card_list(cards, db, user_id)
 
 
 @router.get("/{card_id}", response_model=KnowledgeCardResponse)
@@ -280,4 +352,7 @@ async def get_card(
     if not card:
         raise HTTPException(status_code=404, detail=f"Card {card_id} not found")
 
-    return _serialize_card(card, db, user_id)
+    serialized = _serialize_card(card, db, user_id)
+    if serialized is None:
+        raise HTTPException(status_code=404, detail=f"Card {card_id} is no longer available")
+    return serialized

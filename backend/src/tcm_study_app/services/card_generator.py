@@ -7,6 +7,11 @@ from sqlalchemy.orm import Session
 
 from tcm_study_app.core import get_card_template, get_subject_definition
 from tcm_study_app.models import CardCitation, KnowledgeCard, SourceDocument, StudyCollection
+from tcm_study_app.services.clinical_card_cleanup import (
+    clean_clinical_card_payload,
+    extract_clinical_disease_name,
+    is_valid_clinical_card_payload,
+)
 from tcm_study_app.services.llm_service import llm_service
 
 
@@ -221,7 +226,8 @@ class CardGenerator:
 
         for index, chunk in enumerate(candidates):
             single = re.sub(r"\s+", " ", chunk.content).strip()
-            if single and single not in seen_contents:
+            has_heading = bool(extract_clinical_disease_name(chunk.content))
+            if single and has_heading and single not in seen_contents:
                 units.append(
                     _ExtractableUnit(
                         chunk_id=chunk.id,
@@ -240,7 +246,7 @@ class CardGenerator:
                 if item.content.strip()
             ).strip()
             pair = re.sub(r"\s+", " ", pair)
-            if pair and pair not in seen_contents:
+            if pair and has_heading and pair not in seen_contents:
                 units.append(
                     _ExtractableUnit(
                         chunk_id=chunk.id,
@@ -255,7 +261,10 @@ class CardGenerator:
     def _extract_card(self, subject_key: str, template_key: str, text: str) -> dict:
         """Route extraction through the right template-aware extractor."""
         if subject_key == "acupuncture" and template_key == "clinical_treatment":
-            return llm_service.extract_acupuncture_clinical_card(text)
+            return clean_clinical_card_payload(
+                llm_service.extract_acupuncture_clinical_card(text),
+                source_text=text,
+            )
 
         subject = get_subject_definition(subject_key)
         return subject.extract(llm_service, text)
@@ -293,73 +302,13 @@ class CardGenerator:
     ) -> bool:
         """Filter obviously noisy cards before persistence."""
         if subject_key == "acupuncture" and template_key == "clinical_treatment":
-            blocked_title_patterns = (
-                r"^本病",
-                r"^必要时",
-                r"^用于临床",
-                r"^血管情况",
-                r"^分钟",
-                r"^特殊的",
-                r"^或胀痛",
-                r"^风寒证$",
-                r"^风热证$",
-                r"^风湿证$",
-                r"^肝阳上亢证$",
-                r"^肾虚证$",
-                r"^血虚证$",
-                r"^痰浊证$",
-                r"^血瘀证$",
-                r"^气滞证$",
-                r"^寒凝证$",
-                r"^按病症$",
-                r"^依病症$",
-                r"^共同症$",
-                r"^特征症$",
-                r"^其他病$",
-                r"^针对病$",
-                r"^全身兼症$",
-                r"^伴随症$",
-                r"^配穴",
-                r"^治法",
-                r"^方义",
-                r"^检查",
-                r"^病位",
-                r"^患者",
-                r"^主要表现",
-                r"^主要改善",
-                r"^改善症状",
-                r"^治疗目的是",
-                r"^治疗方案",
-                r"^治疗策略",
-                r"^应以治疗",
-                r"^可根据",
-                r"^还需与",
-                r"^明确",
-                r"^部分患者",
-                r"^将来",
-                r"^模仿",
-                r"病因辨证",
-                r"辨证",
-                r"常伴",
-                r"内镜",
-                r"上位神经中枢",
-                r"检查",
-                r"鉴别",
-                r"解决思路",
-                r"预后",
-                r"方义",
+            cleaned = clean_clinical_card_payload(
+                {
+                    "disease_name": title,
+                    **extracted,
+                },
             )
-            if any(re.search(pattern, title) for pattern in blocked_title_patterns):
-                return False
-            if len(title) > 14 or title.endswith("证"):
-                return False
-            if not re.search(
-                r"(病|症|综合征|痹|痛|瘫|聋|哮|痫|闭经|带下|遗尿|泄泻|不寐|眩晕|中风)",
-                title,
-            ):
-                return False
-            if not extracted.get("treatment_principle") or not extracted.get("acupoint_prescription"):
-                return False
+            return is_valid_clinical_card_payload(cleaned)
         return True
 
     def _split_acupuncture_chunk(self, content: str) -> list[str]:

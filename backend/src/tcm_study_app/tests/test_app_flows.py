@@ -454,6 +454,31 @@ def test_clinical_acupuncture_template_skips_duplicate_titles_across_documents(c
     assert titles.count("颈椎病") == 1
 
 
+def test_clinical_acupuncture_template_ignores_continuation_noise(client):
+    """Continuation pages without a disease heading should not become cards."""
+    collection = _create_collection(client, "针灸学·临床续页过滤", "针灸学")
+    document_id = _import_text(
+        client,
+        collection["id"],
+        """
+2.其他治疗
+（1）耳针法 肝、肾、脾、肺、内分泌。
+【按语】 黄褐斑的发生可受多种因素影响，要积极治疗原发病。
+        """.strip(),
+    )
+
+    response = client.post(
+        "/api/cards/generate",
+        json={
+            "document_id": document_id,
+            "template_key": "clinical_treatment",
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "No cards could be generated from this document"
+
+
 def test_clinical_title_quality_gate_blocks_obvious_noise():
     """Clinical treatment cards should reject non-disease headings."""
     generator = CardGenerator(db=None)
@@ -483,6 +508,24 @@ def test_clinical_title_quality_gate_blocks_obvious_noise():
         {
             "treatment_principle": "通络止痛",
             "acupoint_prescription": "下关、合谷、太冲",
+        },
+    )
+    assert generator._passes_subject_quality_gate(  # noqa: SLF001
+        "acupuncture",
+        "clinical_treatment",
+        "痹证",
+        {
+            "treatment_principle": "祛风散寒，通络止痛",
+            "acupoint_prescription": "阿是穴、风池、合谷",
+        },
+    )
+    assert generator._passes_subject_quality_gate(  # noqa: SLF001
+        "acupuncture",
+        "clinical_treatment",
+        "戒毒综合征",
+        {
+            "treatment_principle": "安神定志，疏调气血",
+            "acupoint_prescription": "百会、水沟、神门、内关",
         },
     )
 
