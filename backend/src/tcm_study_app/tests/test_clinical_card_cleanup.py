@@ -43,6 +43,21 @@ def test_is_valid_clinical_card_payload_rejects_descriptive_sentence_title():
     assert not is_valid_clinical_card_payload(cleaned)
 
 
+def test_is_valid_clinical_card_payload_rejects_evaluative_sentence_title():
+    """Evaluation sentences should not survive as disease titles."""
+    cleaned = clean_clinical_card_payload(
+        {
+            "disease_name": "针灸能有效缓解颈部疼痛",
+            "treatment_principle": "调和气血，通络止痛",
+            "acupoint_prescription": "颈夹脊、风池、后溪",
+            "notes": None,
+        },
+        source_text="针灸能有效缓解颈部疼痛，适合颈椎病患者长期随访。",
+    )
+
+    assert not is_valid_clinical_card_payload(cleaned)
+
+
 def test_extract_clinical_disease_name_accepts_numbered_heading_without_labels():
     """Clinical sections should recognize numbered disease headings before treatment labels appear."""
     title = extract_clinical_disease_name(
