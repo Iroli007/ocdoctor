@@ -316,16 +316,47 @@ class CardGenerator:
                 r"^共同症$",
                 r"^特征症$",
                 r"^其他病$",
+                r"^针对病$",
+                r"^全身兼症$",
+                r"^伴随症$",
                 r"^配穴",
+                r"^治法",
+                r"^方义",
+                r"^检查",
+                r"^病位",
+                r"^患者",
+                r"^主要表现",
+                r"^主要改善",
+                r"^改善症状",
+                r"^治疗目的是",
+                r"^治疗方案",
+                r"^治疗策略",
+                r"^应以治疗",
+                r"^可根据",
+                r"^还需与",
+                r"^明确",
+                r"^部分患者",
+                r"^将来",
+                r"^模仿",
                 r"病因辨证",
                 r"辨证",
                 r"常伴",
                 r"内镜",
                 r"上位神经中枢",
+                r"检查",
+                r"鉴别",
+                r"解决思路",
+                r"预后",
+                r"方义",
             )
             if any(re.search(pattern, title) for pattern in blocked_title_patterns):
                 return False
             if len(title) > 14 or title.endswith("证"):
+                return False
+            if not re.search(
+                r"(病|症|综合征|痹|痛|瘫|聋|哮|痫|闭经|带下|遗尿|泄泻|不寐|眩晕|中风)",
+                title,
+            ):
                 return False
             if not extracted.get("treatment_principle") or not extracted.get("acupoint_prescription"):
                 return False

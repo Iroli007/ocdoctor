@@ -1,4 +1,5 @@
 """API flow tests for the knowledge-library app."""
+from tcm_study_app.services.card_generator import CardGenerator
 from tcm_study_app.services.document_library import DocumentLibrary
 
 
@@ -451,6 +452,39 @@ def test_clinical_acupuncture_template_skips_duplicate_titles_across_documents(c
     assert cards_response.status_code == 200
     titles = [card["title"] for card in cards_response.json()]
     assert titles.count("颈椎病") == 1
+
+
+def test_clinical_title_quality_gate_blocks_obvious_noise():
+    """Clinical treatment cards should reject non-disease headings."""
+    generator = CardGenerator(db=None)
+
+    assert not generator._passes_subject_quality_gate(  # noqa: SLF001
+        "acupuncture",
+        "clinical_treatment",
+        "共同症",
+        {
+            "treatment_principle": "调和气血",
+            "acupoint_prescription": "合谷、太冲",
+        },
+    )
+    assert not generator._passes_subject_quality_gate(  # noqa: SLF001
+        "acupuncture",
+        "clinical_treatment",
+        "配穴风热动风证",
+        {
+            "treatment_principle": "疏风清热",
+            "acupoint_prescription": "风池、合谷",
+        },
+    )
+    assert generator._passes_subject_quality_gate(  # noqa: SLF001
+        "acupuncture",
+        "clinical_treatment",
+        "三叉神经痛",
+        {
+            "treatment_principle": "通络止痛",
+            "acupoint_prescription": "下关、合谷、太冲",
+        },
+    )
 
 
 def test_missing_collection_returns_http_friendly_404(client):

@@ -323,17 +323,57 @@ def _is_relevant_page_text(
 
     if subject_key == "acupuncture":
         if "clinical_treatment" in " ".join(_suggest_templates(file_name, subject_key)):
-            strong_keywords = (
+            treatment_keywords = (
                 "治法",
+                "治则",
+                "处方",
+                "取穴",
                 "主穴",
                 "配穴",
-                "治疗策略",
                 "治疗方案",
-                "辨证",
-                "病因病机",
-                "检查要点",
-                "疼痛",
+                "治疗策略",
+                "基本处方",
+                "针灸处方",
             )
+            disease_keywords = (
+                "病",
+                "症",
+                "综合征",
+                "痹",
+                "痛",
+                "瘫",
+                "哮",
+                "痫",
+                "聋",
+                "闭经",
+                "带下",
+                "遗尿",
+                "泄泻",
+            )
+            noise_keywords = (
+                "目录",
+                "编写说明",
+                "前言",
+                "参考文献",
+                "版权页",
+                "检查要点",
+                "预后",
+                "难点分析",
+                "解决思路",
+                "病因病机",
+                "病因辨证",
+                "按辨证",
+                "共同症",
+                "兼症",
+                "方义",
+            )
+            has_treatment = any(keyword in compact for keyword in treatment_keywords)
+            has_disease = any(keyword in compact for keyword in disease_keywords)
+            if any(keyword in compact for keyword in noise_keywords) and not has_treatment:
+                return False
+            if has_treatment and has_disease:
+                return True
+            return len(compact) >= max(min_char_count, 220) and has_treatment
         else:
             strong_keywords = (
                 "定位",

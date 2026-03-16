@@ -462,6 +462,9 @@ class LLMService:
             disease_name = re.sub(r"^第[一二三四五六七八九十百]+节\s*", "", disease_name).strip()
             disease_name = re.sub(r"^如", "", disease_name).strip()
             disease_name = re.sub(r"^本病相当于西医学的", "", disease_name).strip()
+            disease_name = re.sub(r"^(按辨证与辨病|按辨病与辨证|按辨证|按病症|依病症|配穴)", "", disease_name).strip()
+            disease_name = re.sub(r"^(共同症|伴随症|全身兼症|特征症)", "", disease_name).strip()
+            disease_name = re.sub(r"(的病因辨证|病因辨证|病因病)$", "", disease_name).strip()
 
         return {
             "disease_name": disease_name or "未知病证",
