@@ -243,6 +243,9 @@ async def set_card_importance(
 async def get_cards(
     collection_id: int = Query(..., description="Collection ID"),
     user_id: int = Query(1, description="User ID"),
+    template_key: str | None = Query(None, description="Optional template key filter"),
+    limit: int | None = Query(None, ge=1, le=100, description="Optional result limit"),
+    offset: int = Query(0, ge=0, description="Optional result offset"),
     db: Session = Depends(get_db),
 ):
     """Get all cards for a collection."""
@@ -253,12 +256,13 @@ async def get_cards(
     if not collection:
         raise HTTPException(status_code=404, detail=f"Collection {collection_id} not found")
 
-    cards = (
-        db.query(KnowledgeCard)
-        .filter(KnowledgeCard.collection_id == collection_id)
-        .order_by(KnowledgeCard.created_at.desc())
-        .all()
-    )
+    query = db.query(KnowledgeCard).filter(KnowledgeCard.collection_id == collection_id)
+    if template_key:
+        query = query.filter(KnowledgeCard.category == template_key)
+    query = query.order_by(KnowledgeCard.created_at.desc()).offset(offset)
+    if limit is not None:
+        query = query.limit(limit)
+    cards = query.all()
 
     return [_serialize_card(card, db, user_id) for card in cards]
 

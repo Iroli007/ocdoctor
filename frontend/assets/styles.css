@@ -43,6 +43,7 @@ textarea {
   display: flex;
   gap: 8px;
   align-items: center;
+  margin-left: auto;
 }
 
 .workspace-brand-mark {
@@ -58,6 +59,7 @@ textarea {
   gap: 14px;
   align-items: center;
   flex-wrap: wrap;
+  flex: 1 1 auto;
 }
 
 .collection-switcher {
@@ -175,6 +177,7 @@ button:disabled {
   align-items: center;
   gap: 16px;
   flex-wrap: wrap;
+  width: 100%;
 }
 
 .panel,

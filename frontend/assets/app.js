@@ -2,6 +2,10 @@ const state = {
   collections: [],
   documents: [],
   cards: [],
+  cardsByTemplate: {},
+  templateOffsets: {},
+  templateHasMore: {},
+  drawnCardIdsByTemplate: {},
   templates: [],
   activeCollectionId: null,
   activeDocumentId: null,
@@ -10,6 +14,9 @@ const state = {
   currentUserId: null,
   users: [],
 };
+
+const CARD_BATCH_SIZE = 12;
+const PREFETCH_THRESHOLD = 6;
 
 function normalizeTitleKey(value) {
   return String(value || "")
@@ -56,7 +63,15 @@ function mergeCollectionsBySubject(collections) {
         member_collection_ids: group.map((item) => item.id).sort((left, right) => left - right),
       };
     })
-    .sort((left, right) => left.title.localeCompare(right.title, "zh-CN"));
+    .sort((left, right) => {
+      if (left.subject_key === "acupuncture") {
+        return -1;
+      }
+      if (right.subject_key === "acupuncture") {
+        return 1;
+      }
+      return left.title.localeCompare(right.title, "zh-CN");
+    });
 }
 
 function pickBetterDocument(current, candidate) {
@@ -241,7 +256,10 @@ function getTemplateCards(templateKey = state.activeTemplateKey) {
 }
 
 function getRandomDrawPool(templateKey = state.activeTemplateKey) {
-  return getTemplateCards(templateKey);
+  const cards = getTemplateCards(templateKey);
+  const drawnIds = state.drawnCardIdsByTemplate[templateKey] || [];
+  const unseenCards = cards.filter((card) => !drawnIds.includes(card.id));
+  return unseenCards.length ? unseenCards : cards;
 }
 
 function getDocumentTemplateScore(document, templateKey, subjectKey) {
@@ -366,13 +384,21 @@ function renderTemplates() {
     .join("");
 
   container.querySelectorAll("[data-template-key]").forEach((button) => {
-    button.addEventListener("click", () => {
+    button.addEventListener("click", async () => {
       state.activeTemplateKey = button.dataset.templateKey;
+      const userId = state.currentUserId || 1;
+      if (!state.cardsByTemplate[state.activeTemplateKey]) {
+        setStatus("正在切换模板...");
+        state.cards = await loadCardsForActiveCollection(userId, state.activeTemplateKey);
+      } else {
+        state.cards = state.cardsByTemplate[state.activeTemplateKey];
+      }
       const templateCards = getTemplateCards(state.activeTemplateKey);
       state.activeCardId = templateCards[0]?.id || null;
       syncBestDocumentSelection();
       renderTemplates();
       renderCards();
+      setStatus(`已切换到${findTemplateLabel(state.activeTemplateKey)}。`);
     });
   });
 }
@@ -490,7 +516,9 @@ async function loadCollections() {
   const collections = await api("/api/collections");
   state.collections = mergeCollectionsBySubject(collections);
   if (!state.activeCollectionId && state.collections.length) {
-    state.activeCollectionId = state.collections[0].id;
+    state.activeCollectionId =
+      state.collections.find((collection) => collection.subject_key === "acupuncture")?.id ||
+      state.collections[0].id;
   }
   syncCollectionSelects();
 }
@@ -509,18 +537,40 @@ async function loadDocumentsForActiveCollection() {
   return dedupeDocuments(documents.flat());
 }
 
-async function loadCardsForActiveCollection(userId) {
+function resetTemplateCardCache() {
+  state.cards = [];
+  state.cardsByTemplate = {};
+  state.templateOffsets = {};
+  state.templateHasMore = {};
+  state.drawnCardIdsByTemplate = {};
+}
+
+async function loadCardsForActiveCollection(
+  userId,
+  templateKey = state.activeTemplateKey,
+  { append = false } = {},
+) {
   const active = getActiveCollection();
-  if (!active) {
+  if (!active || !templateKey) {
     return [];
   }
 
+  const offset = append ? state.templateOffsets[templateKey] || 0 : 0;
   const cards = await Promise.all(
     active.member_collection_ids.map((collectionId) =>
-      api(`/api/cards?collection_id=${collectionId}&user_id=${userId}`),
+      api(
+        `/api/cards?collection_id=${collectionId}&user_id=${userId}&template_key=${encodeURIComponent(templateKey)}&limit=${CARD_BATCH_SIZE}&offset=${offset}`,
+      ),
     ),
   );
-  return dedupeCards(cards.flat());
+  const fetchedCards = dedupeCards(cards.flat());
+  const mergedCards = append
+    ? dedupeCards([...(state.cardsByTemplate[templateKey] || []), ...fetchedCards])
+    : fetchedCards;
+  state.cardsByTemplate[templateKey] = mergedCards;
+  state.templateOffsets[templateKey] = offset + CARD_BATCH_SIZE;
+  state.templateHasMore[templateKey] = cards.some((batch) => batch.length === CARD_BATCH_SIZE);
+  return mergedCards;
 }
 
 async function refreshWorkspace() {
@@ -529,11 +579,11 @@ async function refreshWorkspace() {
   const active = getActiveCollection();
   if (!active) {
     state.documents = [];
-    state.cards = [];
     state.templates = [];
     state.activeTemplateKey = null;
     state.activeDocumentId = null;
     state.activeCardId = null;
+    resetTemplateCardCache();
     renderTemplates();
     renderCards();
     return;
@@ -541,12 +591,13 @@ async function refreshWorkspace() {
 
   const userId = state.currentUserId || 1;
   state.documents = await loadDocumentsForActiveCollection();
-  state.cards = await loadCardsForActiveCollection(userId);
   state.templates = await api(`/api/templates?subject=${active.subject_key}`);
 
   if (!state.templates.find((template) => template.key === state.activeTemplateKey)) {
     state.activeTemplateKey = state.templates[0]?.key || null;
   }
+  resetTemplateCardCache();
+  state.cards = await loadCardsForActiveCollection(userId, state.activeTemplateKey);
   const activeTemplateCards = getTemplateCards();
   if (
     !state.cards.find((card) => card.id === state.activeCardId) ||
@@ -570,6 +621,9 @@ async function updateCardImportance(cardId, importanceLevel) {
     body: JSON.stringify({ importance_level: importanceLevel }),
   });
   state.cards = state.cards.map((card) => (card.id === updatedCard.id ? updatedCard : card));
+  if (state.activeTemplateKey) {
+    state.cardsByTemplate[state.activeTemplateKey] = state.cards;
+  }
   state.activeCardId = updatedCard.id;
   renderCards();
   setStatus(`已将「${updatedCard.title}」标记为 ${importanceLevel} 星重要程度。`);
@@ -603,6 +657,7 @@ async function drawRandomCard() {
   }
 
   const button = document.getElementById("generate-button");
+  const userId = state.currentUserId || 1;
 
   try {
     setButtonBusy(button, true, "抽卡中...");
@@ -610,8 +665,21 @@ async function drawRandomCard() {
     if (existingCards.length) {
       setStatus("正在随机抽卡...");
       const drawnCard = pickRandomItem(existingCards);
+      state.drawnCardIdsByTemplate[state.activeTemplateKey] = Array.from(
+        new Set([...(state.drawnCardIdsByTemplate[state.activeTemplateKey] || []), drawnCard.id]),
+      );
       state.activeCardId = drawnCard.id;
       renderCards();
+      if (
+        getRandomDrawPool().length <= PREFETCH_THRESHOLD &&
+        state.templateHasMore[state.activeTemplateKey]
+      ) {
+        void loadCardsForActiveCollection(userId, state.activeTemplateKey, { append: true }).then(
+          (cards) => {
+            state.cards = cards;
+          },
+        );
+      }
       setStatus(`已随机抽到「${drawnCard.title}」。`);
       return;
     }
@@ -629,7 +697,6 @@ async function drawRandomCard() {
     }
 
     setStatus("正在整理内容并随机抽卡...");
-    const userId = state.currentUserId || 1;
     let payload;
     try {
       payload = await api(`/api/cards/generate?user_id=${userId}`, {
@@ -662,7 +729,9 @@ async function drawRandomCard() {
         throw error;
       }
     }
-    state.cards = await loadCardsForActiveCollection(userId);
+    state.cards = await loadCardsForActiveCollection(userId, state.activeTemplateKey, {
+      append: true,
+    });
     let drawnCard =
       pickRandomItem(
         payload.cards.filter((card) => card.template_key === state.activeTemplateKey),
@@ -761,6 +830,7 @@ async function bootstrapWorkspace() {
           state.activeCollectionId = id;
           state.activeDocumentId = null;
           state.activeCardId = null;
+          resetTemplateCardCache();
           syncCollectionSelects();
           await refreshWorkspace();
         }
