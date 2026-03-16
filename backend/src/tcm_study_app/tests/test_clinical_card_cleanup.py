@@ -70,3 +70,44 @@ def test_extract_clinical_disease_name_accepts_numbered_heading_without_labels()
     )
 
     assert title == "头痛"
+
+
+def test_clean_clinical_card_payload_recovers_disease_from_later_heading():
+    """Continuation-like noise should recover to a later valid disease heading when present."""
+    cleaned = clean_clinical_card_payload(
+        {
+            "disease_name": "排除其他病",
+            "treatment_principle": "理气活血，行滞催产",
+            "acupoint_prescription": "至阴",
+            "notes": None,
+        },
+        source_text="""
+治疗前要做相应的检查，排除其他病因。
+滞产
+滞产是指妊娠足月，临产时胎儿不能顺利娩出。
+治法：理气活血，行滞催产。
+主穴：至阴。
+        """,
+    )
+
+    assert cleaned["disease_name"] == "滞产"
+
+
+def test_clean_clinical_card_payload_recovers_from_symptom_title():
+    """Symptom-like titles should recover to a known disease when the source heading is available."""
+    cleaned = clean_clinical_card_payload(
+        {
+            "disease_name": "喉中哮",
+            "treatment_principle": "祛邪肃肺，化痰平喘",
+            "acupoint_prescription": "列缺、尺泽、肺俞、中府、定喘",
+            "notes": None,
+        },
+        source_text="""
+哮喘
+主症呼吸急促，喉中哮鸣，甚则张口抬肩。
+治法：祛邪肃肺，化痰平喘。
+主穴：列缺、尺泽、肺俞、中府、定喘。
+        """,
+    )
+
+    assert cleaned["disease_name"] == "哮喘"
