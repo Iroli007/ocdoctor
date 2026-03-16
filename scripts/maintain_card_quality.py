@@ -11,6 +11,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "backend" / "src"))
 
 from tcm_study_app.db.session import SessionLocal
 from tcm_study_app.models import KnowledgeCard
+from tcm_study_app.services.acupuncture_card_cleanup import (
+    clean_acupuncture_card_payload,
+    is_valid_acupuncture_card_payload,
+)
 from tcm_study_app.services.clinical_card_cleanup import (
     clean_clinical_card_payload,
     is_valid_clinical_card_payload,
@@ -54,18 +58,40 @@ def main() -> int:
             except (json.JSONDecodeError, TypeError, ValueError):
                 payload = {}
 
-            cleaned = clean_clinical_card_payload(
-                {
-                    "disease_name": payload.get("disease_name") or card.title,
-                    "treatment_principle": payload.get("treatment_principle"),
-                    "acupoint_prescription": payload.get("acupoint_prescription"),
-                    "notes": payload.get("notes"),
-                },
-                source_text="\n\n".join(
-                    [card.raw_excerpt or "", *[citation.quote or "" for citation in card.citations]]
-                ),
+            source_text = "\n\n".join(
+                [card.raw_excerpt or "", *[citation.quote or "" for citation in card.citations]]
             )
-            if not is_valid_clinical_card_payload(cleaned):
+
+            if args.template_key == "clinical_treatment":
+                cleaned = clean_clinical_card_payload(
+                    {
+                        "disease_name": payload.get("disease_name") or card.title,
+                        "treatment_principle": payload.get("treatment_principle"),
+                        "acupoint_prescription": payload.get("acupoint_prescription"),
+                        "notes": payload.get("notes"),
+                    },
+                    source_text=source_text,
+                )
+                is_valid = is_valid_clinical_card_payload(cleaned)
+                title = cleaned["disease_name"] if is_valid else card.title
+                template_label = payload.get("template_label", "病证治疗卡")
+            else:
+                cleaned = clean_acupuncture_card_payload(
+                    {
+                        "acupoint_name": payload.get("acupoint_name") or card.title,
+                        "meridian": payload.get("meridian"),
+                        "location": payload.get("location"),
+                        "indication": payload.get("indication"),
+                        "technique": payload.get("technique"),
+                        "caution": payload.get("caution"),
+                    },
+                    source_text=source_text,
+                )
+                is_valid = is_valid_acupuncture_card_payload(cleaned)
+                title = cleaned["acupoint_name"] if is_valid else card.title
+                template_label = payload.get("template_label", "穴位基础卡")
+
+            if not is_valid:
                 if args.prune_invalid:
                     db.delete(card)
                     deleted_count += 1
@@ -73,12 +99,12 @@ def main() -> int:
 
             next_payload = {
                 "template_key": payload.get("template_key", args.template_key),
-                "template_label": payload.get("template_label", "病证治疗卡"),
+                "template_label": template_label,
                 **cleaned,
             }
             next_json = json.dumps(next_payload, ensure_ascii=False)
-            if card.title != cleaned["disease_name"] or card.normalized_content_json != next_json:
-                card.title = cleaned["disease_name"]
+            if card.title != title or card.normalized_content_json != next_json:
+                card.title = title
                 card.normalized_content_json = next_json
                 cleaned_count += 1
 

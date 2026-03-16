@@ -7,6 +7,10 @@ from sqlalchemy.orm import Session
 
 from tcm_study_app.core import get_card_template, get_subject_definition
 from tcm_study_app.models import CardCitation, KnowledgeCard, SourceDocument, StudyCollection
+from tcm_study_app.services.acupuncture_card_cleanup import (
+    clean_acupuncture_card_payload,
+    is_valid_acupuncture_card_payload,
+)
 from tcm_study_app.services.clinical_card_cleanup import (
     clean_clinical_card_payload,
     extract_clinical_disease_name,
@@ -274,6 +278,11 @@ class CardGenerator:
                 llm_service.extract_acupuncture_clinical_card(text),
                 source_text=text,
             )
+        if subject_key == "acupuncture":
+            return clean_acupuncture_card_payload(
+                llm_service.extract_acupuncture_card(text),
+                source_text=text,
+            )
 
         subject = get_subject_definition(subject_key)
         return subject.extract(llm_service, text)
@@ -318,6 +327,14 @@ class CardGenerator:
                 },
             )
             return is_valid_clinical_card_payload(cleaned)
+        if subject_key == "acupuncture":
+            cleaned = clean_acupuncture_card_payload(
+                {
+                    "acupoint_name": title,
+                    **extracted,
+                },
+            )
+            return is_valid_acupuncture_card_payload(cleaned)
         return True
 
     def _split_acupuncture_chunk(self, content: str) -> list[str]:

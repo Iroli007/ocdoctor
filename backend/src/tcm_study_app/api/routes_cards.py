@@ -22,6 +22,10 @@ from tcm_study_app.schemas import (
     WarmDiseaseCardData,
 )
 from tcm_study_app.services import create_card_generator
+from tcm_study_app.services.acupuncture_card_cleanup import (
+    clean_acupuncture_card_payload,
+    is_valid_acupuncture_card_payload,
+)
 from tcm_study_app.services.card_pool import select_weighted_card_batch
 from tcm_study_app.services.clinical_card_cleanup import (
     clean_clinical_card_payload,
@@ -158,6 +162,26 @@ def _serialize_card(
         normalized_content = {
             "template_key": template_key,
             "template_label": (normalized_content or {}).get("template_label", "病证治疗卡"),
+            **cleaned,
+        }
+    elif template_key in {"acupoint_foundation", "acupoint_review"}:
+        cleaned = clean_acupuncture_card_payload(
+            {
+                "acupoint_name": (normalized_content or {}).get("acupoint_name") or card.title,
+                "meridian": (normalized_content or {}).get("meridian"),
+                "location": (normalized_content or {}).get("location"),
+                "indication": (normalized_content or {}).get("indication"),
+                "technique": (normalized_content or {}).get("technique"),
+                "caution": (normalized_content or {}).get("caution"),
+            },
+            source_text=_clinical_source_text(card),
+        )
+        if not is_valid_acupuncture_card_payload(cleaned):
+            return None
+        title = cleaned["acupoint_name"]
+        normalized_content = {
+            "template_key": template_key,
+            "template_label": (normalized_content or {}).get("template_label", "穴位基础卡"),
             **cleaned,
         }
 
