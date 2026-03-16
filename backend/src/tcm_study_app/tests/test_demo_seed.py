@@ -83,8 +83,8 @@ def test_seed_demo_content_preserves_existing_user_data():
         engine.dispose()
 
 
-def test_ensure_fixed_users_creates_the_two_local_accounts():
-    """The app should always have the two selectable local users available."""
+def test_ensure_fixed_users_keeps_only_the_single_local_account():
+    """The app should only keep the single local account used in production."""
     engine = create_engine(
         "sqlite://",
         connect_args={"check_same_thread": False},
@@ -106,7 +106,6 @@ def test_ensure_fixed_users_creates_the_two_local_accounts():
         users = db.query(User).order_by(User.id.asc()).all()
         assert [(user.id, user.name, user.email) for user in users] == [
             (1, "从清晨到向晚", "dawn@ocdoctor.local"),
-            (2, "刘正", "liuzheng@ocdoctor.local"),
         ]
     finally:
         db.close()

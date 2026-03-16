@@ -254,7 +254,7 @@ button:disabled {
 
 .focus-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.1fr) minmax(320px, 0.9fr);
+  grid-template-columns: minmax(0, 1.05fr) minmax(320px, 0.85fr) minmax(240px, 0.6fr);
   gap: 18px;
 }
 
@@ -263,8 +263,27 @@ button:disabled {
 }
 
 .card-focus-panel,
-.detail-panel {
+.detail-panel,
+.acupoint-list-panel {
   min-height: 560px;
+}
+
+.acupoint-name-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-content: flex-start;
+}
+
+.acupoint-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 7px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--panel-soft);
+  color: var(--ink);
+  font-size: 0.9rem;
 }
 
 .citation-card {
@@ -442,75 +461,6 @@ button:disabled {
   }
 }
 
-/* User selection overlay */
-.user-select-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(17, 24, 39, 0.85);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-}
-
-.user-select-overlay.hidden {
-  display: none;
-}
-
-.user-select-modal {
-  background: var(--panel);
-  border-radius: 24px;
-  padding: 40px 48px;
-  text-align: center;
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.3);
-  max-width: 420px;
-  width: 90%;
-}
-
-.user-select-modal h2 {
-  font-family: "Iowan Old Style", "Palatino Linotype", "Songti SC", serif;
-  font-size: 1.8rem;
-  margin: 0 0 8px;
-}
-
-.user-select-modal p {
-  color: var(--muted);
-  margin: 0 0 28px;
-}
-
-.user-buttons {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-
-.user-button {
-  padding: 18px 24px;
-  border-radius: 16px;
-  border: none;
-  font-size: 1.1rem;
-  font-weight: 500;
-  color: white;
-  cursor: pointer;
-  transition: transform 140ms ease, box-shadow 140ms ease;
-}
-
-.user-button:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
-}
-
-.user-button.user-1 {
-  background: var(--user-1-bg);
-}
-
-.user-button.user-2 {
-  background: var(--user-2-bg);
-}
-
 .current-user-display {
   display: inline-flex;
   align-items: center;
@@ -521,12 +471,6 @@ button:disabled {
   color: var(--accent);
   font-size: 0.9rem;
   font-weight: 500;
-  cursor: pointer;
-  transition: background 140ms ease;
-}
-
-.current-user-display:hover {
-  background: rgba(31, 111, 235, 0.15);
 }
 
 .my-requests-btn {

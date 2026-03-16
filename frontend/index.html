@@ -7,15 +7,6 @@
     <link rel="stylesheet" href="/assets/styles.css" />
   </head>
   <body>
-    <!-- User selection overlay -->
-    <div id="user-select-overlay" class="user-select-overlay">
-      <div class="user-select-modal">
-        <h2>欢迎使用 OCDoctor</h2>
-        <p>请选择你的账号继续</p>
-        <div id="user-buttons" class="user-buttons"></div>
-      </div>
-    </div>
-
     <div class="app-shell">
       <main class="workspace">
         <header class="workspace-header">
@@ -26,7 +17,7 @@
             <div class="workspace-title-row">
               <h2 id="workspace-title">选择一个集合</h2>
               <select id="collection-switcher" class="collection-switcher"></select>
-              <span id="current-user-display" class="current-user-display"></span>
+              <span id="current-user-display" class="current-user-display">从清晨到向晚</span>
               <button type="button" id="my-requests-btn" class="my-requests-btn">我的缺口</button>
             </div>
           </div>
@@ -59,6 +50,14 @@
               <h2>原文引用</h2>
             </div>
             <div id="card-detail" class="empty-state">点击“随机抽卡”后，这里会显示对应原文。</div>
+          </section>
+
+          <section class="panel acupoint-list-panel">
+            <div class="section-heading">
+              <h2>穴位名称</h2>
+              <p>当前针灸学集合已入库的穴位清单。</p>
+            </div>
+            <div id="acupoint-name-list" class="empty-state">当前不是针灸学集合。</div>
           </section>
         </div>
       </main>

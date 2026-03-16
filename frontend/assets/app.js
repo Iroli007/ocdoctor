@@ -11,8 +11,9 @@ const state = {
   activeDocumentId: null,
   activeCardId: null,
   activeTemplateKey: null,
-  currentUserId: null,
+  currentUserId: 1,
   users: [],
+  acupointNames: [],
 };
 
 const CARD_POOL_SIZE = 10;
@@ -111,6 +112,7 @@ function getCardDedupeKey(card) {
   const canonicalName =
     card.normalized_content?.acupoint_name ||
     card.normalized_content?.disease_name ||
+    card.normalized_content?.concept_name ||
     card.normalized_content?.pattern_name ||
     card.title;
   return `${card.template_key}:${normalizeTitleKey(canonicalName) || card.id}`;
@@ -393,6 +395,59 @@ function renderWorkspaceHeader() {
   if (title) {
     title.textContent = active ? active.title : "选择一个集合";
   }
+  const userDisplay = document.getElementById("current-user-display");
+  if (userDisplay) {
+    userDisplay.textContent = "从清晨到向晚";
+  }
+}
+
+async function loadAcupointNamesForActiveCollection() {
+  const active = getActiveCollection();
+  if (!active || active.subject_key !== "acupuncture") {
+    state.acupointNames = [];
+    return [];
+  }
+
+  const templateKeys = ["acupoint_foundation", "acupoint_review"];
+  const responses = await Promise.all(
+    active.member_collection_ids.flatMap((collectionId) =>
+      templateKeys.map((templateKey) =>
+        api(`/api/cards?collection_id=${collectionId}&user_id=1&template_key=${templateKey}`),
+      ),
+    ),
+  );
+
+  const names = new Set();
+  responses.flat().forEach((card) => {
+    const name = card.normalized_content?.acupoint_name || card.title;
+    if (name) {
+      names.add(name);
+    }
+  });
+  state.acupointNames = [...names].sort((left, right) => left.localeCompare(right, "zh-CN"));
+  return state.acupointNames;
+}
+
+function renderAcupointNameList() {
+  const container = document.getElementById("acupoint-name-list");
+  if (!container) {
+    return;
+  }
+  const active = getActiveCollection();
+  if (!active || active.subject_key !== "acupuncture") {
+    container.className = "empty-state";
+    container.textContent = "当前不是针灸学集合。";
+    return;
+  }
+  if (!state.acupointNames.length) {
+    container.className = "empty-state";
+    container.textContent = "还没有可显示的穴位名称。";
+    return;
+  }
+  container.className = "acupoint-name-list";
+  container.innerHTML = state.acupointNames
+    .map((name) => `<span class="acupoint-pill">${escapeHtml(name)}</span>`)
+    .join("");
 }
 
 function renderTemplates() {
@@ -697,6 +752,7 @@ async function refreshWorkspace() {
   const userId = state.currentUserId || 1;
   state.documents = await loadDocumentsForActiveCollection();
   state.templates = await api(`/api/templates?subject=${active.subject_key}`);
+  await loadAcupointNamesForActiveCollection();
 
   if (!state.templates.find((template) => template.key === state.activeTemplateKey)) {
     state.activeTemplateKey = state.templates[0]?.key || null;
@@ -713,6 +769,7 @@ async function refreshWorkspace() {
   renderWorkspaceHeader();
   renderTemplates();
   renderCards();
+  renderAcupointNameList();
   syncPoolStatus();
 }
 
@@ -800,12 +857,6 @@ async function updateCardImportance(cardId, importanceLevel) {
 
 async function handleUserSelected(userId) {
   state.currentUserId = userId;
-  localStorage.setItem("ocdoctor_user_id", userId);
-
-  const overlay = document.getElementById("user-select-overlay");
-  if (overlay) {
-    overlay.classList.add("hidden");
-  }
 
   renderCurrentUserDisplay();
 
@@ -866,62 +917,16 @@ async function drawRandomCard() {
   }
 }
 
-function renderUserSelect() {
-  const overlay = document.getElementById("user-select-overlay");
-  const container = document.getElementById("user-buttons");
-  if (!overlay || !container) return;
-
-  container.innerHTML = state.users
-    .map(
-      (user) => `
-      <button type="button" class="user-button user-${user.id}" data-user-id="${user.id}">
-        ${escapeHtml(user.name)}
-      </button>
-    `,
-    )
-    .join("");
-
-  container.querySelectorAll("[data-user-id]").forEach((button) => {
-    button.addEventListener("click", async () => {
-      const userId = Number(button.dataset.userId);
-      await handleUserSelected(userId);
-    });
-  });
-}
-
 function renderCurrentUserDisplay() {
   const display = document.getElementById("current-user-display");
   if (!display) return;
-  const user = state.users.find((u) => u.id === state.currentUserId);
-  display.textContent = user ? user.name : "未选择";
-  display.title = "点击切换账号";
-}
-
-function switchUser() {
-  const overlay = document.getElementById("user-select-overlay");
-  if (overlay) {
-    overlay.classList.remove("hidden");
-  }
-  renderUserSelect();
+  display.textContent = "从清晨到向晚";
+  display.title = "当前固定用户";
 }
 
 async function bootstrap() {
-  // First load users
-  try {
-    state.users = await api("/api/users");
-  } catch (error) {
-    setStatus(`加载用户列表失败：${error.message}`);
-    return;
-  }
-
-  // Check for saved user
-  const savedUserId = localStorage.getItem("ocdoctor_user_id");
-  if (savedUserId && state.users.find((u) => u.id === Number(savedUserId))) {
-    await handleUserSelected(Number(savedUserId));
-  } else {
-    // Show user selection
-    renderUserSelect();
-  }
+  state.users = [{ id: 1, name: "从清晨到向晚" }];
+  await handleUserSelected(1);
 }
 
 async function bootstrapWorkspace() {
@@ -947,12 +952,6 @@ async function bootstrapWorkspace() {
           await refreshWorkspace();
         }
       };
-    }
-
-    // User display click to switch
-    const userDisplay = document.getElementById("current-user-display");
-    if (userDisplay) {
-      userDisplay.onclick = switchUser;
     }
 
     // Register request button

@@ -251,7 +251,7 @@ def test_theory_review_filters_noisy_titles_in_card_reads(client):
 
 
 def test_card_importance_persists(client):
-    """Card importance should persist independently for each user."""
+    """Card importance should persist for the single fixed user."""
     collection = _create_collection(client, "温病学·卡片重要度", "温病学")
     document_id = _import_text(
         client,
@@ -283,24 +283,9 @@ def test_card_importance_persists(client):
     assert first_update.status_code == 200
     assert first_update.json()["importance_level"] == 4
 
-    second_user_view = client.get(f"/api/cards/{card_id}?user_id=2")
-    assert second_user_view.status_code == 200
-    assert second_user_view.json()["importance_level"] == 0
-
-    second_update = client.post(
-        f"/api/cards/{card_id}/importance?user_id=2",
-        json={"importance_level": 2},
-    )
-    assert second_update.status_code == 200
-    assert second_update.json()["importance_level"] == 2
-
     user_one_cards = client.get(f"/api/cards?collection_id={collection['id']}&user_id=1")
     assert user_one_cards.status_code == 200
     assert user_one_cards.json()[0]["importance_level"] == 4
-
-    user_two_cards = client.get(f"/api/cards?collection_id={collection['id']}&user_id=2")
-    assert user_two_cards.status_code == 200
-    assert user_two_cards.json()[0]["importance_level"] == 2
 
 
 def test_random_card_batch_endpoint_respects_exclusions(client):
@@ -341,13 +326,10 @@ def test_random_card_batch_endpoint_respects_exclusions(client):
 
 
 def test_users_endpoint_returns_fixed_accounts(client):
-    """The frontend should be able to load the two fixed accounts."""
+    """The frontend should only see the single fixed local account."""
     response = client.get("/api/users")
     assert response.status_code == 200
-    assert response.json() == [
-        {"id": 1, "name": "从清晨到向晚"},
-        {"id": 2, "name": "刘正"},
-    ]
+    assert response.json() == [{"id": 1, "name": "从清晨到向晚"}]
 
 
 def test_ocr_textbook_chunk_can_generate_acupuncture_cards(client):

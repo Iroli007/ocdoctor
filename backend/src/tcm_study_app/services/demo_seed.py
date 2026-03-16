@@ -11,7 +11,6 @@ DEMO_USER_ID = 1
 
 FIXED_USERS = [
     {"id": 1, "name": "从清晨到向晚", "email": "dawn@ocdoctor.local"},
-    {"id": 2, "name": "刘正", "email": "liuzheng@ocdoctor.local"},
 ]
 LEGACY_DEMO_TITLES = {
     "方剂学·速测样例",
@@ -102,7 +101,7 @@ def seed_demo_content_if_needed() -> int:
 
 
 def ensure_fixed_users(db: Session) -> None:
-    """Create or sync the two fixed local users."""
+    """Create or sync the single fixed local user and remove old demo users."""
     for user_data in FIXED_USERS:
         existing = db.get(User, user_data["id"])
         if not existing:
@@ -117,6 +116,10 @@ def ensure_fixed_users(db: Session) -> None:
 
         existing.name = user_data["name"]
         existing.email = user_data["email"]
+
+    legacy_user = db.get(User, 2)
+    if legacy_user:
+        db.delete(legacy_user)
 
     db.flush()
 
