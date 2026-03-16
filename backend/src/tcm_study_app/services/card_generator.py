@@ -422,23 +422,18 @@ class CardGenerator:
         if not self._looks_like_acupuncture_table(compact):
             return []
 
-        row_starts = list(
-            re.finditer(
-                r"(?<!\d)(?P<index>[1-9]|1\d|2\d|3\d|4\d|5\d)\s+(?P<name>[\u4e00-\u9fa5]{2,5})(?=\s)",
-                compact,
-            )
-        )
+        row_starts = self._find_acupuncture_table_row_starts(compact)
         if len(row_starts) < 2:
             return []
 
         meridian = self._extract_meridian_from_text(compact)
         blocks: list[str] = []
 
-        for index, match in enumerate(row_starts):
-            start_index = match.start()
-            end_index = row_starts[index + 1].start() if index + 1 < len(row_starts) else len(compact)
+        for index, row_start in enumerate(row_starts):
+            start_index = row_start["start"]
+            end_index = row_starts[index + 1]["start"] if index + 1 < len(row_starts) else len(compact)
             row_text = compact[start_index:end_index].strip(" ；;。")
-            row_name = match.group("name")
+            row_name = row_start["name"]
             if (
                 not row_text
                 or len(row_text) < 10
@@ -455,6 +450,37 @@ class CardGenerator:
                 blocks.append(block)
 
         return blocks
+
+    def _find_acupuncture_table_row_starts(self, text: str) -> list[dict[str, int | str]]:
+        """Find plausible row starts in noisy OCR table text."""
+        patterns = (
+            re.compile(
+                r"(?<!\d)(?:[1-9]|1\d|2\d|3\d|4\d|5\d)\s+(?P<name>[\u4e00-\u9fa5]{2,5})(?=\s)"
+            ),
+            re.compile(
+                r"(?P<name>[\u4e00-\u9fa5]{2,5})\s+"
+                r"(?=井穴|荥穴|荣穴|输穴|俞穴|原穴|经穴|合穴|络穴|郄穴|募穴|下合穴|交会穴|"
+                r"八会穴|八脉交会穴|通于[\u4e00-\u9fa5]+|通[\u4e00-\u9fa5]{1,4}脉)"
+            ),
+            re.compile(
+                r"(?P<name>[\u4e00-\u9fa5]{2,5})\s+"
+                r"(?=在|当|于|上肢|前臂|腕|掌|手|足|头部|面部|胸部|腹部|背部|肩|颈|"
+                r"耳后|耳区|眉梢|乳突|肘|膝|踝|趾|指)"
+            ),
+        )
+
+        starts_by_index: dict[int, dict[str, int | str]] = {}
+        for pattern in patterns:
+            for match in pattern.finditer(text):
+                name = match.group("name")
+                if not self._looks_like_acupuncture_row_name(name):
+                    continue
+                start = match.start("name")
+                current = starts_by_index.get(start)
+                if current is None or len(str(current["name"])) < len(name):
+                    starts_by_index[start] = {"start": start, "name": name}
+
+        return [starts_by_index[index] for index in sorted(starts_by_index)]
 
     def _looks_like_acupuncture_table(self, text: str) -> bool:
         """Only treat true acupoint tables as acupoint-row sources."""
@@ -479,9 +505,36 @@ class CardGenerator:
     def _looks_like_acupuncture_row_name(self, name: str) -> bool:
         """Guard against non-acupoint row titles in mixed tables."""
         cleaned = re.sub(r"\s+", "", name)
-        if not 2 <= len(cleaned) <= 5:
+        if not 2 <= len(cleaned) <= 4:
             return False
-        if any(token in cleaned for token in ("主治", "定位", "刺灸", "注意", "病", "症", "表", "图")):
+        if any(
+            token in cleaned
+            for token in (
+                "主治",
+                "定位",
+                "刺灸",
+                "注意",
+                "病",
+                "症",
+                "表",
+                "图",
+                "穴",
+                "脉",
+                "交会",
+                "原穴",
+                "经穴",
+                "络穴",
+                "合穴",
+                "井穴",
+                "荥穴",
+                "荣穴",
+                "输穴",
+                "俞穴",
+                "募穴",
+                "郄穴",
+                "下合",
+            )
+        ):
             return False
         return True
 
@@ -494,7 +547,7 @@ class CardGenerator:
     ) -> str | None:
         """Convert one OCR table row into a labeled pseudo-paragraph for extraction."""
         body = re.sub(
-            rf"^(?:[1-9]|1\d|2\d|3\d|4\d|5\d)\s+{re.escape(row_name)}\s*",
+            rf"^(?:(?:[1-9]|1\d|2\d|3\d|4\d|5\d)\s+)?{re.escape(row_name)}\s*",
             "",
             row_text,
         ).strip()
@@ -529,6 +582,7 @@ class CardGenerator:
             )
             if caution_match:
                 caution = caution_match.group(1).strip(" ；;。")
+                caution = re.sub(r"\s+(?:[1-9]|1\d|2\d|3\d|4\d|5\d)$", "", caution).strip()
                 tail = tail[: caution_match.start()].strip(" ；;。")
             technique = tail or None
 
