@@ -11,6 +11,104 @@ const state = {
   users: [],
 };
 
+function normalizeTitleKey(value) {
+  return String(value || "")
+    .replace(/\s+/g, "")
+    .replace(/[（(].*?[）)]/g, "")
+    .replace(/[^\u4e00-\u9fa5A-Za-z0-9]/g, "")
+    .toLowerCase();
+}
+
+function pickPrimaryCollection(collections) {
+  return [...collections].sort((left, right) => {
+    const leftExact = left.title === left.subject_display_name ? 1 : 0;
+    const rightExact = right.title === right.subject_display_name ? 1 : 0;
+    if (leftExact !== rightExact) {
+      return rightExact - leftExact;
+    }
+    return left.title.length - right.title.length;
+  })[0];
+}
+
+function mergeCollectionsBySubject(collections) {
+  const grouped = new Map();
+  for (const collection of collections) {
+    if (!grouped.has(collection.subject_key)) {
+      grouped.set(collection.subject_key, []);
+    }
+    grouped.get(collection.subject_key).push(collection);
+  }
+
+  return Array.from(grouped.values())
+    .map((group) => {
+      const primary = pickPrimaryCollection(group);
+      return {
+        id: `subject:${primary.subject_key}`,
+        title: primary.subject_display_name,
+        subject: primary.subject,
+        subject_key: primary.subject_key,
+        subject_display_name: primary.subject_display_name,
+        description:
+          group.length > 1
+            ? `已自动合并 ${group.length} 个同学科来源，前台不再分开显示。`
+            : primary.description,
+        primary_collection_id: primary.id,
+        member_collection_ids: group.map((item) => item.id).sort((left, right) => left - right),
+      };
+    })
+    .sort((left, right) => left.title.localeCompare(right.title, "zh-CN"));
+}
+
+function pickBetterDocument(current, candidate) {
+  if (!current) {
+    return candidate;
+  }
+  const currentScore = (current.chunk_count || 0) * 10 + (current.page_count || 0);
+  const candidateScore = (candidate.chunk_count || 0) * 10 + (candidate.page_count || 0);
+  return candidateScore >= currentScore ? candidate : current;
+}
+
+function dedupeDocuments(documents) {
+  const deduped = new Map();
+  for (const document of documents) {
+    const key = document.file_name || `document:${document.id}`;
+    deduped.set(key, pickBetterDocument(deduped.get(key), document));
+  }
+  return Array.from(deduped.values()).sort((left, right) => right.id - left.id);
+}
+
+function pickBetterCard(current, candidate) {
+  if (!current) {
+    return candidate;
+  }
+  const scoreCard = (card) => {
+    const fieldCount = Object.entries(card.normalized_content || {}).filter(
+      ([key, value]) => value && !["template_key", "template_label"].includes(key),
+    ).length;
+    const citationCount = card.citations?.length || 0;
+    return fieldCount * 10 + citationCount;
+  };
+  return scoreCard(candidate) >= scoreCard(current) ? candidate : current;
+}
+
+function getCardDedupeKey(card) {
+  const canonicalName =
+    card.normalized_content?.acupoint_name ||
+    card.normalized_content?.disease_name ||
+    card.normalized_content?.pattern_name ||
+    card.title;
+  return `${card.template_key}:${normalizeTitleKey(canonicalName) || card.id}`;
+}
+
+function dedupeCards(cards) {
+  const deduped = new Map();
+  for (const card of cards) {
+    const key = getCardDedupeKey(card);
+    deduped.set(key, pickBetterCard(deduped.get(key), card));
+  }
+  return Array.from(deduped.values()).sort((left, right) => right.id - left.id);
+}
+
 const fieldLabels = {
   acupoint_name: "穴位名称",
   meridian: "经络",
@@ -350,6 +448,9 @@ function renderCards() {
 
 function renderCardDetail() {
   const container = document.getElementById("card-detail");
+  if (!container) {
+    return;
+  }
   const card = getActiveCard();
   if (!card) {
     container.className = "empty-state";
@@ -386,11 +487,40 @@ function renderCardDetail() {
 }
 
 async function loadCollections() {
-  state.collections = await api("/api/collections");
+  const collections = await api("/api/collections");
+  state.collections = mergeCollectionsBySubject(collections);
   if (!state.activeCollectionId && state.collections.length) {
     state.activeCollectionId = state.collections[0].id;
   }
   syncCollectionSelects();
+}
+
+async function loadDocumentsForActiveCollection() {
+  const active = getActiveCollection();
+  if (!active) {
+    return [];
+  }
+
+  const documents = await Promise.all(
+    active.member_collection_ids.map((collectionId) =>
+      api(`/api/documents?collection_id=${collectionId}`),
+    ),
+  );
+  return dedupeDocuments(documents.flat());
+}
+
+async function loadCardsForActiveCollection(userId) {
+  const active = getActiveCollection();
+  if (!active) {
+    return [];
+  }
+
+  const cards = await Promise.all(
+    active.member_collection_ids.map((collectionId) =>
+      api(`/api/cards?collection_id=${collectionId}&user_id=${userId}`),
+    ),
+  );
+  return dedupeCards(cards.flat());
 }
 
 async function refreshWorkspace() {
@@ -410,8 +540,8 @@ async function refreshWorkspace() {
   }
 
   const userId = state.currentUserId || 1;
-  state.documents = await api(`/api/documents?collection_id=${active.id}`);
-  state.cards = await api(`/api/cards?collection_id=${active.id}&user_id=${userId}`);
+  state.documents = await loadDocumentsForActiveCollection();
+  state.cards = await loadCardsForActiveCollection(userId);
   state.templates = await api(`/api/templates?subject=${active.subject_key}`);
 
   if (!state.templates.find((template) => template.key === state.activeTemplateKey)) {
@@ -532,7 +662,7 @@ async function drawRandomCard() {
         throw error;
       }
     }
-    state.cards = await api(`/api/cards?collection_id=${state.activeCollectionId}&user_id=${userId}`);
+    state.cards = await loadCardsForActiveCollection(userId);
     let drawnCard =
       pickRandomItem(
         payload.cards.filter((card) => card.template_key === state.activeTemplateKey),
@@ -626,7 +756,7 @@ async function bootstrapWorkspace() {
     const collectionSwitcher = document.getElementById("collection-switcher");
     if (collectionSwitcher) {
       collectionSwitcher.onchange = async (event) => {
-        const id = Number(event.target.value);
+        const id = event.target.value;
         if (id) {
           state.activeCollectionId = id;
           state.activeDocumentId = null;
@@ -719,7 +849,7 @@ async function submitCardRequest(event) {
         requested_name: requestedName,
         chapter_info: chapterInfo || null,
         notes: notes || null,
-        collection_id: state.activeCollectionId,
+        collection_id: getActiveCollection()?.primary_collection_id || null,
       }),
     });
     closeCardRequestModal();
