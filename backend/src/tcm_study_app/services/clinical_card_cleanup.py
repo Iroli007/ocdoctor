@@ -131,7 +131,7 @@ _DISEASE_SUFFIXES = (
 )
 _DISEASE_BODY_PATTERN = (
     rf"(?:{'|'.join(map(re.escape, _DISEASE_EXACT_TERMS))}|"
-    rf"[\u4e00-\u9fa5]{{2,18}}(?:{'|'.join(map(re.escape, _DISEASE_SUFFIXES))}))"
+    rf"[\u4e00-\u9fa5]{{1,18}}(?:{'|'.join(map(re.escape, _DISEASE_SUFFIXES))}))"
 )
 _DISEASE_PATTERN = re.compile(
     _DISEASE_BODY_PATTERN
@@ -265,6 +265,14 @@ def extract_clinical_disease_name(source_text: str | None, preferred_title: str 
     text = source_text or ""
     compact_text = _clean_common_text(text)
 
+    for raw_line in text.splitlines()[:8]:
+        line = raw_line.strip()
+        if not line:
+            continue
+        line = re.sub(r"^(?:[（(]?[一二三四五六七八九十百]+[)）]?[、\.．]?|[（(]?\d+[)）]?[、\.．]?)\s*", "", line)
+        if is_valid_clinical_title(line):
+            candidates.append(line)
+
     contextual_patterns = (
         rf"本病相当于西医学的({_DISEASE_BODY_PATTERN})",
         rf"中医称(?:本病)?为?({_DISEASE_BODY_PATTERN})",
@@ -274,6 +282,7 @@ def extract_clinical_disease_name(source_text: str | None, preferred_title: str 
             candidates.append(match.group(match.lastindex or 0))
 
     heading_patterns = (
+        rf"(?:^|\n)\s*(?:第[一二三四五六七八九十百]+[章节][^\n]{{0,12}}\n)?(?:[一二三四五六七八九十百]+[、\.．]|\d+[、\.．])\s*({_DISEASE_BODY_PATTERN})(?=\s)",
         rf"(?:^|\n)\s*(?:第[一二三四五六七八九十百]+[章节][^\n]{{0,12}}\n)?(?:[一二三四五六七八九十百]+[、\.．]|\d+[、\.．])?\s*({_DISEASE_BODY_PATTERN})(?=\s*(?:治法|治则|治疗原则|辨证论治|处方|取穴|主穴|配穴|加减|$))",
         rf"(?:^|[。；])\s*({_DISEASE_BODY_PATTERN})(?=\s*(?:治法|治则|治疗原则|辨证论治|处方|取穴|主穴|配穴|加减))",
         rf"(?:^|\s)(?:第[一二三四五六七八九十百]+[章节]\s*[^\s]{{0,8}}\s+)?(?:[一二三四五六七八九十百]+[、\.．]|\d+[、\.．])?\s*({_DISEASE_BODY_PATTERN})(?=\s*(?:治法|治则|治疗原则|辨证论治|处方|取穴|主穴|配穴|加减))",

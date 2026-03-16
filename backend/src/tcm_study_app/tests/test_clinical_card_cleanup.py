@@ -1,6 +1,7 @@
 """Clinical acupuncture card cleanup tests."""
 from tcm_study_app.services.clinical_card_cleanup import (
     clean_clinical_card_payload,
+    extract_clinical_disease_name,
     is_valid_clinical_card_payload,
 )
 
@@ -40,3 +41,17 @@ def test_is_valid_clinical_card_payload_rejects_descriptive_sentence_title():
     )
 
     assert not is_valid_clinical_card_payload(cleaned)
+
+
+def test_extract_clinical_disease_name_accepts_numbered_heading_without_labels():
+    """Clinical sections should recognize numbered disease headings before treatment labels appear."""
+    title = extract_clinical_disease_name(
+        """
+一、头痛
+头痛是患者自觉头部疼痛的一类病症。
+（二）诊断要点
+偏头痛反复发作。
+        """
+    )
+
+    assert title == "头痛"

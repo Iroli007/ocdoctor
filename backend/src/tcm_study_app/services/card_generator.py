@@ -223,40 +223,49 @@ class CardGenerator:
         candidates = self._candidate_chunks("acupuncture", "clinical_treatment", chunks)
         units: list[_ExtractableUnit] = []
         seen_contents: set[str] = set()
+        max_window = 8
 
         for index, chunk in enumerate(candidates):
-            single = re.sub(r"\s+", " ", chunk.content).strip()
             has_heading = bool(extract_clinical_disease_name(chunk.content))
-            if single and has_heading and single not in seen_contents:
-                units.append(
-                    _ExtractableUnit(
-                        chunk_id=chunk.id,
-                        page_number=chunk.page_number,
-                        content=single,
-                    )
-                )
-                seen_contents.add(single)
-
-            if index + 1 >= len(candidates):
+            if not has_heading:
                 continue
 
-            pair = "\n\n".join(
-                item.content.strip()
-                for item in candidates[index : index + 2]
-                if item.content.strip()
-            ).strip()
-            pair = re.sub(r"\s+", " ", pair)
-            if pair and has_heading and pair not in seen_contents:
-                units.append(
-                    _ExtractableUnit(
-                        chunk_id=chunk.id,
-                        page_number=chunk.page_number,
-                        content=pair,
+            window_parts: list[str] = []
+            for next_chunk in candidates[index : index + max_window]:
+                if (
+                    window_parts
+                    and next_chunk is not chunk
+                    and extract_clinical_disease_name(next_chunk.content)
+                ):
+                    break
+
+                content = next_chunk.content.strip()
+                if not content:
+                    continue
+                window_parts.append(content)
+                window_text = re.sub(r"\s+", " ", "\n\n".join(window_parts)).strip()
+                if (
+                    window_text
+                    and self._clinical_window_has_core_markers(window_text)
+                    and window_text not in seen_contents
+                ):
+                    units.append(
+                        _ExtractableUnit(
+                            chunk_id=chunk.id,
+                            page_number=chunk.page_number,
+                            content=window_text,
+                        )
                     )
-                )
-                seen_contents.add(pair)
+                    seen_contents.add(window_text)
 
         return units
+
+    def _clinical_window_has_core_markers(self, text: str) -> bool:
+        """Require a clinical window to reach the treatment/prescription core."""
+        return bool(
+            re.search(r"(治法|治则|治疗原则|辨证论治)", text)
+            and re.search(r"(处方|取穴|主穴|配穴|选穴|基本处方)", text)
+        )
 
     def _extract_card(self, subject_key: str, template_key: str, text: str) -> dict:
         """Route extraction through the right template-aware extractor."""

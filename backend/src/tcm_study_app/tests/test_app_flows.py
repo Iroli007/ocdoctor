@@ -1,4 +1,6 @@
 """API flow tests for the knowledge-library app."""
+from types import SimpleNamespace
+
 from tcm_study_app.services.card_generator import CardGenerator
 from tcm_study_app.services.document_library import DocumentLibrary
 
@@ -528,6 +530,47 @@ def test_clinical_title_quality_gate_blocks_obvious_noise():
             "acupoint_prescription": "百会、水沟、神门、内关",
         },
     )
+
+
+def test_clinical_treatment_units_can_span_multiple_chunks():
+    """A numbered heading should carry forward until later treatment chunks appear."""
+    generator = CardGenerator(db=None)
+    chunks = [
+        SimpleNamespace(
+            id=1,
+            page_number=1,
+            content="""
+一、头痛
+头痛是患者自觉头部疼痛的一类病症。
+（二）诊断要点
+偏头痛反复发作。
+            """.strip(),
+        ),
+        SimpleNamespace(
+            id=2,
+            page_number=2,
+            content="""
+（六）治疗策略
+本病治疗重在通络止痛。
+            """.strip(),
+        ),
+        SimpleNamespace(
+            id=3,
+            page_number=2,
+            content="""
+（七）治疗方案
+治法：调和气血，通络止痛。
+主穴：百会、风池、太阳、合谷。
+加减：外感头痛加大椎、曲池。
+            """.strip(),
+        ),
+    ]
+
+    units = generator._build_clinical_treatment_units(chunks)  # noqa: SLF001
+
+    assert units
+    assert "头痛" in units[-1].content
+    assert "主穴" in units[-1].content
 
 
 def test_missing_collection_returns_http_friendly_404(client):
