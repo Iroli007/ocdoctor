@@ -32,6 +32,10 @@ from tcm_study_app.services.clinical_card_cleanup import (
     is_valid_clinical_card_payload,
     normalize_clinical_title_key,
 )
+from tcm_study_app.services.theory_card_cleanup import (
+    clean_theory_card_payload,
+    is_valid_theory_card_payload,
+)
 
 router = APIRouter(prefix="/api/cards", tags=["cards"])
 
@@ -182,6 +186,24 @@ def _serialize_card(
         normalized_content = {
             "template_key": template_key,
             "template_label": (normalized_content or {}).get("template_label", "穴位基础卡"),
+            **cleaned,
+        }
+    elif template_key == "theory_review":
+        cleaned = clean_theory_card_payload(
+            {
+                "concept_name": (normalized_content or {}).get("concept_name") or card.title,
+                "category": (normalized_content or {}).get("category"),
+                "core_points": (normalized_content or {}).get("core_points"),
+                "exam_focus": (normalized_content or {}).get("exam_focus"),
+            },
+            source_text=_clinical_source_text(card),
+        )
+        if not is_valid_theory_card_payload(cleaned):
+            return None
+        title = cleaned["concept_name"]
+        normalized_content = {
+            "template_key": template_key,
+            "template_label": (normalized_content or {}).get("template_label", "总论高频卡"),
             **cleaned,
         }
 

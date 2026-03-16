@@ -19,6 +19,10 @@ from tcm_study_app.services.clinical_card_cleanup import (
     clean_clinical_card_payload,
     is_valid_clinical_card_payload,
 )
+from tcm_study_app.services.theory_card_cleanup import (
+    clean_theory_card_payload,
+    is_valid_theory_card_payload,
+)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -75,6 +79,19 @@ def main() -> int:
                 is_valid = is_valid_clinical_card_payload(cleaned)
                 title = cleaned["disease_name"] if is_valid else card.title
                 template_label = payload.get("template_label", "病证治疗卡")
+            elif args.template_key == "theory_review":
+                cleaned = clean_theory_card_payload(
+                    {
+                        "concept_name": payload.get("concept_name") or card.title,
+                        "category": payload.get("category"),
+                        "core_points": payload.get("core_points"),
+                        "exam_focus": payload.get("exam_focus"),
+                    },
+                    source_text=source_text,
+                )
+                is_valid = is_valid_theory_card_payload(cleaned)
+                title = cleaned["concept_name"] if is_valid else card.title
+                template_label = payload.get("template_label", "总论高频卡")
             else:
                 cleaned = clean_acupuncture_card_payload(
                     {

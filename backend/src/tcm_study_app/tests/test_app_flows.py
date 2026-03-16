@@ -225,6 +225,31 @@ def test_acupuncture_theory_template_generation_returns_cards(client):
     assert payload["cards"][0]["normalized_content"]["core_points"]
 
 
+def test_theory_review_filters_noisy_titles_in_card_reads(client):
+    """Theory review cards should clean noisy OCR titles before returning to the frontend."""
+    collection = _create_collection(client, "针灸学·总论清洗", "针灸学")
+    document_id = _import_text(
+        client,
+        collection["id"],
+        """
+针灸治疗原则
+定义：针灸治疗应遵循补虚泻实、清热温寒、治病求本等原则。
+内容：期末常考配穴原则、补泻原则和局部与远部取穴结合。
+        """.strip(),
+    )
+
+    response = client.post(
+        "/api/cards/generate",
+        json={"document_id": document_id, "template_key": "theory_review"},
+    )
+    assert response.status_code == 200
+    card_id = response.json()["cards"][0]["id"]
+
+    detail = client.get(f"/api/cards/{card_id}")
+    assert detail.status_code == 200
+    assert detail.json()["title"] == "针灸治疗原则"
+
+
 def test_card_importance_persists(client):
     """Card importance should persist independently for each user."""
     collection = _create_collection(client, "温病学·卡片重要度", "温病学")

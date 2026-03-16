@@ -16,6 +16,10 @@ from tcm_study_app.services.clinical_card_cleanup import (
     extract_clinical_disease_name,
     is_valid_clinical_card_payload,
 )
+from tcm_study_app.services.theory_card_cleanup import (
+    clean_theory_card_payload,
+    is_valid_theory_card_payload,
+)
 from tcm_study_app.services.llm_service import llm_service
 
 
@@ -307,7 +311,10 @@ class CardGenerator:
                 source_text=text,
             )
         if subject_key == "acupuncture" and template_key == "theory_review":
-            return llm_service.extract_acupuncture_theory_card(text)
+            return clean_theory_card_payload(
+                llm_service.extract_acupuncture_theory_card(text),
+                source_text=text,
+            )
         if subject_key == "acupuncture":
             return clean_acupuncture_card_payload(
                 llm_service.extract_acupuncture_card(text),
@@ -362,16 +369,13 @@ class CardGenerator:
             )
             return is_valid_clinical_card_payload(cleaned)
         if subject_key == "acupuncture" and template_key == "theory_review":
-            concept_name = (title or "").strip()
-            core_points = (extracted.get("core_points") or "").strip()
-            exam_focus = (extracted.get("exam_focus") or "").strip()
-            blocked_tokens = ("第", "附录", "目录", "前言", "参考文献")
-            return (
-                2 <= len(concept_name) <= 12
-                and not any(token in concept_name for token in blocked_tokens)
-                and len(core_points) >= 8
-                and (len(exam_focus) >= 4 or any(token in core_points for token in ("原则", "作用", "特点", "应用")))
+            cleaned = clean_theory_card_payload(
+                {
+                    "concept_name": title,
+                    **extracted,
+                },
             )
+            return is_valid_theory_card_payload(cleaned)
         if subject_key == "acupuncture":
             cleaned = clean_acupuncture_card_payload(
                 {
