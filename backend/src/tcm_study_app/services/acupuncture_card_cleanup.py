@@ -12,6 +12,13 @@ _BLOCKED_NAME_EXACT = {
     "注意事项",
     "主要病候",
     "主治概要",
+    "中",
+    "关",
+    "天",
+    "巨",
+    "心",
+    "次",
+    "醒",
 }
 _BLOCKED_NAME_SUBSTRINGS = (
     "病",
@@ -27,9 +34,20 @@ _BLOCKED_NAME_SUBSTRINGS = (
     "方法",
     "歌赋",
     "治疗",
+    "第三章",
+    "经脉",
+    "循行",
+    "部位",
+    "各论",
+    "腧穴",
+    "喻穴",
 )
 _FALLBACK_NAME_PATTERN = re.compile(
     r"(?:^|[。；;\s])(?:\d+\.)?\s*([\u4e00-\u9fa5]{1,8})(?:\*|\s)*\([^)]*[A-Za-z]{1,3}\s*\d+[^)]*\)"
+)
+_FALLBACK_NUMBERED_NAME_PATTERN = re.compile(
+    r"(?:^|[。；;\s])(?:\d+[\.、]\s*|[一二三四五六七八九十]+\s*[\.、]\s*)"
+    r"([\u4e00-\u9fa5]{2,5})(?=(?:\*|【|［|[，。,；;]|\s|$))"
 )
 _KNOWN_LABELS = ("定位", "主治", "操作", "刺灸法", "注意", "禁忌", "解剖", "经络", "归经")
 
@@ -54,9 +72,11 @@ def _looks_like_valid_name(name: str | None) -> bool:
     if not name:
         return False
     cleaned = re.sub(r"\s+", "", name)
-    if not 1 <= len(cleaned) <= 8:
+    if not 2 <= len(cleaned) <= 5:
         return False
     if cleaned in _BLOCKED_NAME_EXACT:
+        return False
+    if cleaned.endswith(("各", "其", "的")):
         return False
     return not any(token in cleaned for token in _BLOCKED_NAME_SUBSTRINGS)
 
@@ -69,11 +89,15 @@ def clean_acupuncture_card_payload(
     """Normalize acupoint card fields and recover the point name when possible."""
     acupoint_name = _clean_field_prefix(payload.get("acupoint_name"))
     if not _looks_like_valid_name(acupoint_name) and source_text:
-        match = _FALLBACK_NAME_PATTERN.search(re.sub(r"\s+", " ", source_text))
-        if match:
+        normalized_source = re.sub(r"\s+", " ", source_text)
+        for pattern in (_FALLBACK_NAME_PATTERN, _FALLBACK_NUMBERED_NAME_PATTERN):
+            match = pattern.search(normalized_source)
+            if not match:
+                continue
             candidate = _clean_field_prefix(match.group(1))
             if _looks_like_valid_name(candidate):
                 acupoint_name = candidate
+                break
 
     cleaned = {
         "acupoint_name": acupoint_name,

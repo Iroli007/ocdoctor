@@ -35,3 +35,35 @@ def test_acupuncture_card_cleanup_rejects_noisy_heading_cards():
     )
 
     assert is_valid_acupuncture_card_payload(cleaned) is False
+
+
+def test_acupuncture_card_cleanup_rejects_single_character_titles():
+    cleaned = clean_acupuncture_card_payload(
+        {
+            "acupoint_name": "心",
+            "meridian": "手少阴心经",
+            "location": "在腕横纹尺侧端",
+            "indication": "心痛、惊悸",
+            "technique": "直刺0.3寸",
+            "caution": None,
+        }
+    )
+
+    assert is_valid_acupuncture_card_payload(cleaned) is False
+
+
+def test_acupuncture_card_cleanup_recovers_numbered_name_without_pinyin():
+    cleaned = clean_acupuncture_card_payload(
+        {
+            "acupoint_name": "第三章经络喻穴各",
+            "meridian": None,
+            "location": "鼻唇沟中点旁开。",
+            "indication": "鼻塞、口眼歪斜。",
+            "technique": "斜刺0.3寸。",
+            "caution": None,
+        },
+        source_text="1. 迎香 【定位】在鼻翼外缘中点旁开0.5寸。【主治】鼻塞。",
+    )
+
+    assert cleaned["acupoint_name"] == "迎香"
+    assert is_valid_acupuncture_card_payload(cleaned) is True
