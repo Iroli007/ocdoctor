@@ -86,6 +86,7 @@ _TITLE_BLOCKED_SUBSTRINGS = (
     "疾病",
     "日赤肿痛",
     "红肿热痛",
+    "刺痛",
 )
 _TITLE_VERB_PREFIX_PATTERN = re.compile(
     r"^(?:要|应|宜|可|需|先|后|再|将|按|依|从|以|用|取|作|行|予|令|使|做|因|防)"
@@ -248,9 +249,13 @@ def is_valid_clinical_title(title: str | None) -> bool:
         return False
     if "等" in cleaned:
         return False
+    if "时" in cleaned or "及" in cleaned:
+        return False
     if _TITLE_VERB_PREFIX_PATTERN.search(cleaned):
         return False
     if _TITLE_THERAPY_PREFIX_PATTERN.search(cleaned):
+        return False
+    if re.match(r"^(阳明|少阳|太阳|厥阴)", cleaned):
         return False
     if re.search(r"[A-Za-z0-9]", cleaned):
         return False
@@ -272,6 +277,12 @@ def extract_clinical_disease_name(source_text: str | None, preferred_title: str 
         line = re.sub(r"^(?:[（(]?[一二三四五六七八九十百]+[)）]?[、\.．]?|[（(]?\d+[)）]?[、\.．]?)\s*", "", line)
         if is_valid_clinical_title(line):
             candidates.append(line)
+
+    for match in re.finditer(
+        rf"[一二三四五六七八九十百]+[、\.．]\s*({_DISEASE_BODY_PATTERN})",
+        text,
+    ):
+        candidates.append(match.group(match.lastindex or 0))
 
     contextual_patterns = (
         rf"本病相当于西医学的({_DISEASE_BODY_PATTERN})",
