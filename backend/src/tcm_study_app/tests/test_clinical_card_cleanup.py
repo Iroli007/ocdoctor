@@ -58,6 +58,27 @@ def test_is_valid_clinical_card_payload_rejects_evaluative_sentence_title():
     assert not is_valid_clinical_card_payload(cleaned)
 
 
+def test_is_valid_clinical_card_payload_rejects_explanatory_tail_titles():
+    """Explanatory and complication phrases should not survive in the card pool."""
+    for title in (
+        "针灸对由器质性病",
+        "有明显精神心理症",
+        "最终实现减少或控制顺痛",
+        "尤其对功能性病",
+        "早期约半数患者无明显症",
+    ):
+        cleaned = clean_clinical_card_payload(
+            {
+                "disease_name": title,
+                "treatment_principle": "调和气血，通络止痛",
+                "acupoint_prescription": "合谷、太冲、足三里",
+                "notes": None,
+            },
+            source_text=title,
+        )
+        assert not is_valid_clinical_card_payload(cleaned)
+
+
 def test_extract_clinical_disease_name_accepts_numbered_heading_without_labels():
     """Clinical sections should recognize numbered disease headings before treatment labels appear."""
     title = extract_clinical_disease_name(
