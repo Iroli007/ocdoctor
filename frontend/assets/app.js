@@ -13,7 +13,6 @@ const state = {
   activeTemplateKey: null,
   currentUserId: 1,
   users: [],
-  acupointNames: [],
 };
 
 const CARD_POOL_SIZE = 10;
@@ -401,55 +400,6 @@ function renderWorkspaceHeader() {
   }
 }
 
-async function loadAcupointNamesForActiveCollection() {
-  const active = getActiveCollection();
-  if (!active || active.subject_key !== "acupuncture") {
-    state.acupointNames = [];
-    return [];
-  }
-
-  const templateKeys = ["acupoint_foundation", "acupoint_review"];
-  const responses = await Promise.all(
-    active.member_collection_ids.flatMap((collectionId) =>
-      templateKeys.map((templateKey) =>
-        api(`/api/cards?collection_id=${collectionId}&user_id=1&template_key=${templateKey}`),
-      ),
-    ),
-  );
-
-  const names = new Set();
-  responses.flat().forEach((card) => {
-    const name = card.normalized_content?.acupoint_name || card.title;
-    if (name) {
-      names.add(name);
-    }
-  });
-  state.acupointNames = [...names].sort((left, right) => left.localeCompare(right, "zh-CN"));
-  return state.acupointNames;
-}
-
-function renderAcupointNameList() {
-  const container = document.getElementById("acupoint-name-list");
-  if (!container) {
-    return;
-  }
-  const active = getActiveCollection();
-  if (!active || active.subject_key !== "acupuncture") {
-    container.className = "empty-state";
-    container.textContent = "当前不是针灸学集合。";
-    return;
-  }
-  if (!state.acupointNames.length) {
-    container.className = "empty-state";
-    container.textContent = "还没有可显示的穴位名称。";
-    return;
-  }
-  container.className = "acupoint-name-list";
-  container.innerHTML = state.acupointNames
-    .map((name) => `<span class="acupoint-pill">${escapeHtml(name)}</span>`)
-    .join("");
-}
-
 function renderTemplates() {
   const container = document.getElementById("template-list");
   if (!state.templates.length) {
@@ -752,7 +702,6 @@ async function refreshWorkspace() {
   const userId = state.currentUserId || 1;
   state.documents = await loadDocumentsForActiveCollection();
   state.templates = await api(`/api/templates?subject=${active.subject_key}`);
-  await loadAcupointNamesForActiveCollection();
 
   if (!state.templates.find((template) => template.key === state.activeTemplateKey)) {
     state.activeTemplateKey = state.templates[0]?.key || null;
@@ -769,7 +718,6 @@ async function refreshWorkspace() {
   renderWorkspaceHeader();
   renderTemplates();
   renderCards();
-  renderAcupointNameList();
   syncPoolStatus();
 }
 
