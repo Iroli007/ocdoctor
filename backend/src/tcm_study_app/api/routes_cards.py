@@ -8,16 +8,20 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from tcm_study_app.core import get_subject_definition
+from tcm_study_app.core.card_templates import TEMPLATE_KEY_ALIASES
 from tcm_study_app.db import get_db
 from tcm_study_app.models import KnowledgeCard, StudyCollection, User
 from tcm_study_app.models.user_card_importance import UserCardImportance
 from tcm_study_app.schemas import (
     AcupunctureCardData,
+    AcupointKnowledgeCardData,
     CardCitationResponse,
+    ConditionTreatmentCardData,
     FormulaCardData,
     GenerateCardsRequest,
     GenerateCardsResponse,
     KnowledgeCardResponse,
+    NeedlingTechniqueCardData,
     SetCardImportanceRequest,
     WarmDiseaseCardData,
 )
@@ -35,6 +39,10 @@ from tcm_study_app.services.clinical_card_cleanup import (
     is_valid_clinical_card_payload,
     normalize_clinical_title_key,
 )
+from tcm_study_app.services.needling_technique_cleanup import (
+    clean_needling_technique_payload,
+    is_valid_needling_technique_payload,
+)
 from tcm_study_app.services.theory_card_cleanup import (
     clean_theory_card_payload,
     is_valid_theory_card_payload,
@@ -45,6 +53,16 @@ router = APIRouter(prefix="/api/cards", tags=["cards"])
 logger = logging.getLogger(__name__)
 
 _IMPORTANCE_MIGRATED = False
+
+
+def _template_key_candidates(template_key: str) -> list[str]:
+    """Return all historical/current template keys that should be treated as equivalent."""
+    normalized = TEMPLATE_KEY_ALIASES.get(template_key, template_key)
+    candidates = [normalized]
+    for legacy_key, mapped_key in TEMPLATE_KEY_ALIASES.items():
+        if mapped_key == normalized:
+            candidates.append(legacy_key)
+    return list(dict.fromkeys(candidates))
 
 
 def _ensure_user(db: Session, user_id: int) -> User:
@@ -106,6 +124,9 @@ def _serialize_card(
     """Convert a model into the API response shape."""
     formula_data = None
     acupuncture_data = None
+    acupoint_knowledge_data = None
+    needling_technique_data = None
+    condition_treatment_data = None
     warm_disease_data = None
 
     if card.formula_card:
@@ -131,6 +152,41 @@ def _serialize_card(
             caution=ap.caution,
         )
 
+    if card.acupoint_knowledge_card:
+        ap = card.acupoint_knowledge_card
+        acupoint_knowledge_data = AcupointKnowledgeCardData(
+            acupoint_name=ap.acupoint_name,
+            meridian=ap.meridian,
+            acupoint_property=ap.acupoint_property,
+            location=ap.location,
+            indication=ap.indication,
+            technique=ap.technique,
+            caution=ap.caution,
+        )
+
+    if card.needling_technique_card:
+        nt = card.needling_technique_card
+        needling_technique_data = NeedlingTechniqueCardData(
+            technique_name=nt.technique_name,
+            section_title=nt.section_title,
+            definition_or_scope=nt.definition_or_scope,
+            key_points=nt.key_points,
+            indications=nt.indications,
+            contraindications=nt.contraindications,
+            notes=nt.notes,
+        )
+
+    if card.condition_treatment_card:
+        ct = card.condition_treatment_card
+        condition_treatment_data = ConditionTreatmentCardData(
+            disease_name=ct.disease_name,
+            pattern_name=ct.pattern_name,
+            treatment_principle=ct.treatment_principle,
+            acupoint_prescription=ct.acupoint_prescription,
+            modifications=ct.modifications,
+            notes=ct.notes,
+        )
+
     if card.warm_disease_card:
         wd = card.warm_disease_card
         warm_disease_data = WarmDiseaseCardData(
@@ -144,6 +200,7 @@ def _serialize_card(
 
     subject = get_subject_definition(card.collection.subject if card.collection else None)
     normalized_content, template_key = _load_normalized_content(card)
+    logic_template_key = TEMPLATE_KEY_ALIASES.get(template_key, template_key)
     importance_level = _get_importance(db, user_id, card.id)
     title = card.title
 
@@ -153,12 +210,14 @@ def _serialize_card(
             card.source_document.image_url or f"文档-{card.source_document.id}"
         ).name
 
-    if template_key == "clinical_treatment":
+    if logic_template_key == "condition_treatment":
         cleaned = clean_clinical_card_payload(
             {
                 "disease_name": (normalized_content or {}).get("disease_name") or card.title,
+                "pattern_name": (normalized_content or {}).get("pattern_name"),
                 "treatment_principle": (normalized_content or {}).get("treatment_principle"),
                 "acupoint_prescription": (normalized_content or {}).get("acupoint_prescription"),
+                "modifications": (normalized_content or {}).get("modifications"),
                 "notes": (normalized_content or {}).get("notes"),
             },
             source_text=_clinical_source_text(card),
@@ -171,11 +230,12 @@ def _serialize_card(
             "template_label": (normalized_content or {}).get("template_label", "病证治疗卡"),
             **cleaned,
         }
-    elif template_key in {"acupoint_foundation", "acupoint_review"}:
+    elif logic_template_key == "acupoint_knowledge":
         cleaned = clean_acupuncture_card_payload(
             {
                 "acupoint_name": (normalized_content or {}).get("acupoint_name") or card.title,
                 "meridian": (normalized_content or {}).get("meridian"),
+                "acupoint_property": (normalized_content or {}).get("acupoint_property"),
                 "location": (normalized_content or {}).get("location"),
                 "indication": (normalized_content or {}).get("indication"),
                 "technique": (normalized_content or {}).get("technique"),
@@ -188,16 +248,23 @@ def _serialize_card(
         title = cleaned["acupoint_name"]
         normalized_content = {
             "template_key": template_key,
-            "template_label": (normalized_content or {}).get("template_label", "穴位基础卡"),
+            "template_label": (normalized_content or {}).get("template_label", "经络腧穴卡"),
             **cleaned,
         }
-    elif template_key == "theory_review":
+    elif logic_template_key == "needling_technique" and template_key == "theory_review":
         cleaned = clean_theory_card_payload(
             {
-                "concept_name": (normalized_content or {}).get("concept_name") or card.title,
-                "category": (normalized_content or {}).get("category"),
-                "core_points": (normalized_content or {}).get("core_points"),
-                "exam_focus": (normalized_content or {}).get("exam_focus"),
+                "concept_name": (normalized_content or {}).get("concept_name")
+                or (normalized_content or {}).get("technique_name")
+                or card.title,
+                "category": (normalized_content or {}).get("category")
+                or (normalized_content or {}).get("section_title"),
+                "core_points": (normalized_content or {}).get("core_points")
+                or (normalized_content or {}).get("definition_or_scope")
+                or (normalized_content or {}).get("key_points"),
+                "exam_focus": (normalized_content or {}).get("exam_focus")
+                or (normalized_content or {}).get("indications")
+                or (normalized_content or {}).get("contraindications"),
             },
             source_text=_clinical_source_text(card),
         )
@@ -207,6 +274,27 @@ def _serialize_card(
         normalized_content = {
             "template_key": template_key,
             "template_label": (normalized_content or {}).get("template_label", "总论高频卡"),
+            **cleaned,
+        }
+    elif logic_template_key == "needling_technique":
+        cleaned = clean_needling_technique_payload(
+            {
+                "technique_name": (normalized_content or {}).get("technique_name") or card.title,
+                "section_title": (normalized_content or {}).get("section_title"),
+                "definition_or_scope": (normalized_content or {}).get("definition_or_scope"),
+                "key_points": (normalized_content or {}).get("key_points"),
+                "indications": (normalized_content or {}).get("indications"),
+                "contraindications": (normalized_content or {}).get("contraindications"),
+                "notes": (normalized_content or {}).get("notes"),
+            },
+            source_text=_clinical_source_text(card),
+        )
+        if not is_valid_needling_technique_payload(cleaned):
+            return None
+        title = cleaned["technique_name"]
+        normalized_content = {
+            "template_key": template_key,
+            "template_label": (normalized_content or {}).get("template_label", "刺灸技术卡"),
             **cleaned,
         }
 
@@ -249,6 +337,9 @@ def _serialize_card(
         ],
         formula_card=formula_data,
         acupuncture_card=acupuncture_data,
+        acupoint_knowledge_card=acupoint_knowledge_data,
+        needling_technique_card=needling_technique_data,
+        condition_treatment_card=condition_treatment_data,
         warm_disease_card=warm_disease_data,
         created_at=card.created_at,
     )
@@ -267,7 +358,7 @@ def _serialize_card_list(
         serialized = _serialize_card(card, db, user_id)
         if serialized is None:
             continue
-        if serialized.template_key == "clinical_treatment":
+        if TEMPLATE_KEY_ALIASES.get(serialized.template_key, serialized.template_key) == "condition_treatment":
             title_key = normalize_clinical_title_key(serialized.title)
             if title_key in seen_clinical_titles:
                 continue
@@ -294,6 +385,7 @@ def _card_dedupe_key(card: KnowledgeCardResponse) -> str:
     normalized_content = card.normalized_content or {}
     canonical_name = (
         normalized_content.get("acupoint_name")
+        or normalized_content.get("technique_name")
         or normalized_content.get("disease_name")
         or normalized_content.get("pattern_name")
         or card.title
@@ -335,7 +427,7 @@ def _load_serialized_cards(
     """Load, clean, and dedupe cards across one or more collections."""
     query = db.query(KnowledgeCard).filter(KnowledgeCard.collection_id.in_(collection_ids))
     if template_key:
-        query = query.filter(KnowledgeCard.category == template_key)
+        query = query.filter(KnowledgeCard.category.in_(_template_key_candidates(template_key)))
     query = query.order_by(KnowledgeCard.created_at.desc())
     serialized = _serialize_card_list(query.all(), db, user_id)
     if any(card.subject_key == "acupuncture" for card in serialized):

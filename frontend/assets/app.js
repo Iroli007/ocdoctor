@@ -15,6 +15,13 @@ const state = {
   users: [],
 };
 
+const TEMPLATE_KEY_ALIASES = {
+  acupoint_foundation: "acupoint_knowledge",
+  acupoint_review: "acupoint_knowledge",
+  clinical_treatment: "condition_treatment",
+  theory_review: "needling_technique",
+};
+
 const CARD_POOL_SIZE = 10;
 const CARD_POOL_LOW_WATER = 3;
 const CARD_POOL_POLL_MS = 30_000;
@@ -108,13 +115,15 @@ function pickBetterCard(current, candidate) {
 }
 
 function getCardDedupeKey(card) {
+  const templateKey = TEMPLATE_KEY_ALIASES[card.template_key] || card.template_key;
   const canonicalName =
     card.normalized_content?.acupoint_name ||
     card.normalized_content?.disease_name ||
+    card.normalized_content?.technique_name ||
     card.normalized_content?.concept_name ||
     card.normalized_content?.pattern_name ||
     card.title;
-  return `${card.template_key}:${normalizeTitleKey(canonicalName) || card.id}`;
+  return `${templateKey}:${normalizeTitleKey(canonicalName) || card.id}`;
 }
 
 function dedupeCards(cards) {
@@ -129,13 +138,21 @@ function dedupeCards(cards) {
 const fieldLabels = {
   acupoint_name: "穴位名称",
   meridian: "经络",
+  acupoint_property: "穴性",
   location: "定位",
   indication: "主治",
   technique: "刺灸法",
   caution: "注意事项",
+  technique_name: "技术名称",
+  section_title: "章节标题",
+  definition_or_scope: "定义或范围",
+  key_points: "操作要点",
+  indications: "适应证",
+  contraindications: "禁忌",
   disease_name: "病证名称",
   treatment_principle: "治法原则",
   acupoint_prescription: "处方取穴",
+  modifications: "加减变化",
   notes: "加减按语",
   concept_name: "考点名称",
   category: "所属类别",
@@ -162,7 +179,11 @@ function isVisibleCardField(key, value) {
 }
 
 function isClinicalAcupunctureDocument(document) {
-  return /^\d{2}_/.test(document.file_name || "") || (document.file_name || "").includes("临床针灸学");
+  return (
+    document.source_book_key === "clinical_acupuncture" ||
+    /^\d{2}_/.test(document.file_name || "") ||
+    (document.file_name || "").includes("临床针灸学")
+  );
 }
 
 async function api(path, options = {}) {
@@ -292,7 +313,11 @@ function getActiveDocument() {
 }
 
 function findTemplateLabel(templateKey) {
-  return state.templates.find((item) => item.key === templateKey)?.label || templateKey;
+  const normalizedTemplateKey = TEMPLATE_KEY_ALIASES[templateKey] || templateKey;
+  return (
+    state.templates.find((item) => item.key === normalizedTemplateKey)?.label ||
+    normalizedTemplateKey
+  );
 }
 
 function renderImportanceStars(card) {
@@ -314,20 +339,29 @@ function renderImportanceStars(card) {
 }
 
 function getTemplateCards(templateKey = state.activeTemplateKey) {
-  return state.cards.filter((card) => card.template_key === templateKey);
+  const normalizedTemplateKey = TEMPLATE_KEY_ALIASES[templateKey] || templateKey;
+  return state.cards.filter(
+    (card) => (TEMPLATE_KEY_ALIASES[card.template_key] || card.template_key) === normalizedTemplateKey,
+  );
 }
 
 function getDocumentTemplateScore(document, templateKey, subjectKey) {
+  const normalizedTemplateKey = TEMPLATE_KEY_ALIASES[templateKey] || templateKey;
   const haystack = `${document.file_name || ""}\n${document.preview || ""}`;
   let score = 0;
 
   if (subjectKey === "acupuncture") {
-    if (templateKey === "clinical_treatment") {
+    if (normalizedTemplateKey === "condition_treatment") {
       if (/病症|诊治|治疗|治法|治则|处方|取穴|主穴|配穴|加减|病机/.test(haystack)) score += 5;
       if (/疼症|心脑病症|肺系病症|妇儿科病症|五官病症|其他病症/.test(haystack)) score += 4;
       if (/【定位】|定位[：:]/.test(haystack)) score -= 3;
       if (/刺灸法|操作[：:]/.test(haystack)) score -= 2;
       if (/目录|前言|编写说明|绪论|总论/.test(haystack)) score -= 6;
+    } else if (normalizedTemplateKey === "needling_technique") {
+      if (/毫针|灸法|拔罐|耳针|头针|电针/.test(haystack)) score += 5;
+      if (/定义|概念|原则|特点|临床应用|考试要点|适应证|禁忌|特定穴|定位法/.test(haystack)) score += 4;
+      if (/处方|主穴|配穴|加减|病症|病证/.test(haystack)) score -= 4;
+      if (/目录|前言|编写说明|绪论/.test(haystack)) score -= 6;
     } else {
       if (/【定位】|定位[：:]/.test(haystack)) score += 4;
       if (/【主治】|主治[：:]/.test(haystack)) score += 4;
@@ -345,6 +379,10 @@ function getDocumentTemplateScore(document, templateKey, subjectKey) {
     if (/方药|代表方/.test(haystack)) score += 4;
     if (/辨证要点|卫分|气分|营分|血分|上焦|中焦|下焦/.test(haystack)) score += 2;
     if (/前言|目录|总论|绪论/.test(haystack)) score -= 4;
+  }
+
+  if (normalizedTemplateKey?.includes("technique")) {
+    score += 1;
   }
 
   if (templateKey?.includes("review")) {

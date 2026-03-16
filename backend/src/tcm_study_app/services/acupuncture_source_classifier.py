@@ -1,13 +1,18 @@
-"""Helpers for classifying acupuncture OCR sources and styles."""
+"""Helpers for classifying 《临床针灸学》 OCR sources."""
 from __future__ import annotations
 
 from dataclasses import dataclass
 import re
 
+from tcm_study_app.services.clinical_acupuncture_parser import (
+    ClinicalAcupunctureSectionClassifier,
+    SOURCE_BOOK_LABEL,
+)
+
 
 @dataclass(frozen=True)
 class AcupunctureSourceMeta:
-    """Derived metadata for an acupuncture source document or chunk."""
+    """Derived metadata for one clinical acupuncture source."""
 
     book_key: str
     book_label: str
@@ -15,8 +20,7 @@ class AcupunctureSourceMeta:
     source_style: str
 
 
-_CLINICAL_BOOK_LABEL = "临床针灸学"
-_STANDARD_BOOK_LABEL = "针灸学"
+_classifier = ClinicalAcupunctureSectionClassifier()
 
 
 def classify_acupuncture_source(
@@ -24,86 +28,52 @@ def classify_acupuncture_source(
     *,
     text: str | None = None,
 ) -> AcupunctureSourceMeta:
-    """Classify one acupuncture document into source book, part, and content style."""
+    """Classify a document into section-aware clinical acupuncture metadata."""
     normalized_name = str(file_name or "")
-    book_key = _infer_book_key(normalized_name)
-    book_label = _CLINICAL_BOOK_LABEL if book_key == "clinical_acupuncture" else _STANDARD_BOOK_LABEL
-    book_part = _infer_book_part(normalized_name) if book_key == "clinical_acupuncture" else None
-    source_style = detect_acupuncture_source_style(text or normalized_name)
+    is_clinical = _is_clinical_book_name(normalized_name)
+    section = _classifier.classify_document(file_name, text=text)
+    source_style = detect_acupuncture_source_style(text or file_name)
     return AcupunctureSourceMeta(
-        book_key=book_key,
-        book_label=book_label,
-        book_part=book_part,
+        book_key="clinical_acupuncture" if is_clinical else "standard_acupuncture",
+        book_label=SOURCE_BOOK_LABEL if is_clinical else "针灸学",
+        book_part=_book_part_label(section.book_section) if is_clinical else None,
         source_style=source_style,
     )
 
 
 def is_clinical_acupuncture_source(file_name: str | None) -> bool:
-    """Return whether a source document belongs to 《临床针灸学》."""
-    return _infer_book_key(str(file_name or "")) == "clinical_acupuncture"
+    """Return whether the source is treated as 《临床针灸学》."""
+    return _is_clinical_book_name(str(file_name or ""))
 
 
 def detect_acupuncture_source_style(text: str | None) -> str:
-    """Classify the extraction style for one source snippet."""
-    normalized = re.sub(r"\s+", " ", str(text or "")).strip()
+    """Classify the OCR style for one source snippet."""
+    normalized = " ".join(str(text or "").split())
     if not normalized:
         return "prose"
-    table_head_markers = ("表3-", "续表", "序号", "穴名", "刺灸")
-    row_count = len(
-        re.findall(r"(?<!\d)(?:[1-9]|1\d|2\d|3\d|4\d|5\d)\s+[\u4e00-\u9fa5]{2,5}\s+", normalized)
-    )
-    if any(token in normalized for token in table_head_markers) and (
-        "穴名" in normalized or "序号" in normalized or row_count >= 2
-    ):
+    if any(token in normalized for token in ("序号", "穴名", "定位", "主治", "刺灸")):
         return "table"
-    if "图" in normalized and any(token in normalized for token in ("穴图", "经穴图", "图3-", "图示")):
+    if "图" in normalized and any(token in normalized for token in ("图示", "穴图", "经穴图")):
         return "diagram"
     return "prose"
 
 
-def _infer_book_key(file_name: str) -> str:
-    """Heuristically distinguish 《临床针灸学》 from the other acupuncture textbook."""
-    if re.match(r"^\d{3}_", file_name):
-        return "standard_acupuncture"
-    if re.match(r"^\d{2}_", file_name):
-        return "clinical_acupuncture"
-    if "临床针灸学" in file_name:
-        return "clinical_acupuncture"
-    return "standard_acupuncture"
+def _book_part_label(book_section: str | None) -> str | None:
+    return {
+        "meridian_acupoints": "经络腧穴篇",
+        "needling_techniques": "刺灸技术篇",
+        "treatment": "针灸治疗篇",
+    }.get(book_section)
 
 
-def _infer_book_part(file_name: str) -> str | None:
-    """Map clinical chapter files into 上篇 / 中篇 / 下篇."""
-    prefix_match = re.match(r"^(?P<prefix>\d{2})_", file_name)
-    if prefix_match:
-        index = int(prefix_match.group("prefix"))
-        if 1 <= index <= 4:
-            return "上篇"
-        if 5 <= index <= 8:
-            return "中篇"
-        if index >= 9:
-            return "下篇"
-
-    chapter_match = re.search(r"第(?P<chapter>[一二三四五六七八九十]+)章", file_name)
-    if chapter_match:
-        chapter_map = {
-            "一": 1,
-            "二": 2,
-            "三": 3,
-            "四": 4,
-            "五": 5,
-            "六": 6,
-            "七": 7,
-            "八": 8,
-            "九": 9,
-            "十": 10,
-        }
-        chapter_number = chapter_map.get(chapter_match.group("chapter"))
-        if chapter_number is not None:
-            if 1 <= chapter_number <= 4:
-                return "上篇"
-            if 5 <= chapter_number <= 8:
-                return "中篇"
-            if chapter_number >= 9:
-                return "下篇"
-    return None
+def _is_clinical_book_name(file_name: str) -> bool:
+    normalized = str(file_name or "")
+    if "临床针灸学" in normalized:
+        return True
+    if re.match(r"^\d{3}_", normalized):
+        return False
+    if re.match(r"^\d{2}_", normalized):
+        return True
+    if any(token in normalized for token in ("病症", "病证", "针灸治疗", "经络腧穴", "刺灸技术", "表3-")):
+        return True
+    return False

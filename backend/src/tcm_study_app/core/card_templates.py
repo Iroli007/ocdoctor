@@ -17,13 +17,14 @@ class CardTemplate:
 CARD_TEMPLATES: dict[str, list[CardTemplate]] = {
     "acupuncture": [
         CardTemplate(
-            key="acupoint_foundation",
+            key="acupoint_knowledge",
             subject_key="acupuncture",
-            label="穴位基础卡",
-            description="适合从教材中抽取归经、定位、主治和操作要点。",
+            label="经络腧穴卡",
+            description="适合从《临床针灸学》经络腧穴篇抽取穴位与经脉要点。",
             fields=(
                 "acupoint_name",
                 "meridian",
+                "acupoint_property",
                 "location",
                 "indication",
                 "technique",
@@ -32,36 +33,33 @@ CARD_TEMPLATES: dict[str, list[CardTemplate]] = {
             minimum_fields=4,
         ),
         CardTemplate(
-            key="acupoint_review",
+            key="needling_technique",
             subject_key="acupuncture",
-            label="穴位复习卡",
-            description="更轻量，适合期末前快速回顾常用穴位。",
-            fields=("acupoint_name", "meridian", "location", "indication"),
-            minimum_fields=3,
-        ),
-        CardTemplate(
-            key="clinical_treatment",
-            subject_key="acupuncture",
-            label="病证治疗卡",
-            description="适合从临床针灸教材中抽取病证、治法和处方要点。",
+            label="刺灸技术卡",
+            description="适合从刺灸技术篇抽取技术定义、要点、适应证与禁忌。",
             fields=(
-                "disease_name",
-                "treatment_principle",
-                "acupoint_prescription",
+                "technique_name",
+                "section_title",
+                "definition_or_scope",
+                "key_points",
+                "indications",
+                "contraindications",
                 "notes",
             ),
             minimum_fields=3,
         ),
         CardTemplate(
-            key="theory_review",
+            key="condition_treatment",
             subject_key="acupuncture",
-            label="总论高频卡",
-            description="适合从腧穴总论、刺灸法总论、治疗总论中抽取定义、原则和考试高频要点。",
+            label="病证治疗卡",
+            description="适合从针灸治疗篇抽取病证、治法和处方要点。",
             fields=(
-                "concept_name",
-                "category",
-                "core_points",
-                "exam_focus",
+                "disease_name",
+                "pattern_name",
+                "treatment_principle",
+                "acupoint_prescription",
+                "modifications",
+                "notes",
             ),
             minimum_fields=3,
         ),
@@ -93,6 +91,13 @@ CARD_TEMPLATES: dict[str, list[CardTemplate]] = {
     ],
 }
 
+TEMPLATE_KEY_ALIASES = {
+    "acupoint_foundation": "acupoint_knowledge",
+    "acupoint_review": "acupoint_knowledge",
+    "theory_review": "needling_technique",
+    "clinical_treatment": "condition_treatment",
+}
+
 
 def list_templates_for_subject(subject_key: str) -> list[CardTemplate]:
     """Return supported templates for a subject."""
@@ -101,6 +106,7 @@ def list_templates_for_subject(subject_key: str) -> list[CardTemplate]:
 
 def get_card_template(template_key: str, subject_key: str) -> CardTemplate:
     """Resolve a template for the given subject."""
+    template_key = TEMPLATE_KEY_ALIASES.get(template_key, template_key)
     for template in list_templates_for_subject(subject_key):
         if template.key == template_key:
             return template

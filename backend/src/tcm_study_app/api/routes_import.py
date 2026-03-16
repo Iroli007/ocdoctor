@@ -16,6 +16,20 @@ router = APIRouter(prefix="/api/import", tags=["import"])
 MAX_PDF_UPLOAD_BYTES = 4 * 1024 * 1024
 
 
+def _page_kind_breakdown(document) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for page in document.ocr_pages:
+        counts[page.page_kind] = counts.get(page.page_kind, 0) + 1
+    return counts
+
+
+def _unit_breakdown(document) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for unit in document.parsed_units:
+        counts[unit.unit_type] = counts.get(unit.unit_type, 0) + 1
+    return counts
+
+
 @router.post("/text", response_model=ImportTextResponse)
 async def import_text(request: ImportTextRequest, db: Session = Depends(get_db)):
     """Import plain text into the knowledge library."""
@@ -67,6 +81,10 @@ async def import_pdf(
         status=document.status,
         chunk_count=len(document.chunks),
         page_count=max((chunk.page_number for chunk in document.chunks), default=0),
+        book_section=document.book_section,
+        parsed_unit_count=len(document.parsed_units),
+        page_kind_breakdown=_page_kind_breakdown(document),
+        unit_breakdown=_unit_breakdown(document),
     )
 
 
@@ -93,4 +111,8 @@ async def import_ocr_pages(
         status=document.status,
         chunk_count=len(document.chunks),
         page_count=max((page.page_number for page in request.pages), default=0),
+        book_section=document.book_section,
+        parsed_unit_count=len(document.parsed_units),
+        page_kind_breakdown=_page_kind_breakdown(document),
+        unit_breakdown=_unit_breakdown(document),
     )

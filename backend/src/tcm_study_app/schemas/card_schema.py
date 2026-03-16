@@ -28,6 +28,41 @@ class AcupunctureCardData(BaseModel):
     caution: str | None = None
 
 
+class AcupointKnowledgeCardData(BaseModel):
+    """Acupoint knowledge card data schema."""
+
+    acupoint_name: str
+    meridian: str | None = None
+    acupoint_property: str | None = None
+    location: str | None = None
+    indication: str | None = None
+    technique: str | None = None
+    caution: str | None = None
+
+
+class NeedlingTechniqueCardData(BaseModel):
+    """Needling technique card data schema."""
+
+    technique_name: str
+    section_title: str | None = None
+    definition_or_scope: str | None = None
+    key_points: str | None = None
+    indications: str | None = None
+    contraindications: str | None = None
+    notes: str | None = None
+
+
+class ConditionTreatmentCardData(BaseModel):
+    """Condition treatment card data schema."""
+
+    disease_name: str
+    pattern_name: str | None = None
+    treatment_principle: str | None = None
+    acupoint_prescription: str | None = None
+    modifications: str | None = None
+    notes: str | None = None
+
+
 class WarmDiseaseCardData(BaseModel):
     """Warm disease card data schema."""
 
@@ -70,6 +105,9 @@ class KnowledgeCardResponse(BaseModel):
     citations: list["CardCitationResponse"]
     formula_card: FormulaCardData | None = None
     acupuncture_card: AcupunctureCardData | None = None
+    acupoint_knowledge_card: AcupointKnowledgeCardData | None = None
+    needling_technique_card: NeedlingTechniqueCardData | None = None
+    condition_treatment_card: ConditionTreatmentCardData | None = None
     warm_disease_card: WarmDiseaseCardData | None = None
     created_at: datetime
 

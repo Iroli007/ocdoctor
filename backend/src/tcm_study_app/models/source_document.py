@@ -20,6 +20,12 @@ class SourceDocument(Base):
     raw_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     image_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     ocr_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    source_book_key: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    book_section: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    section_confidence: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    parser_version: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    ocr_engine: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    has_layout_blocks: Mapped[bool] = mapped_column(default=False)
     status: Mapped[str] = mapped_column(
         String(20), default="pending"
     )  # pending / processed / failed
@@ -39,6 +45,16 @@ class SourceDocument(Base):
     )
     chunks: Mapped[list["DocumentChunk"]] = relationship(
         "DocumentChunk",
+        back_populates="source_document",
+        cascade="all, delete-orphan",
+    )
+    ocr_pages: Mapped[list["OCRPage"]] = relationship(
+        "OCRPage",
+        back_populates="source_document",
+        cascade="all, delete-orphan",
+    )
+    parsed_units: Mapped[list["ParsedDocumentUnit"]] = relationship(
+        "ParsedDocumentUnit",
         back_populates="source_document",
         cascade="all, delete-orphan",
     )

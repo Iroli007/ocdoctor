@@ -25,6 +25,10 @@ class CardCitation(Base):
         ForeignKey("document_chunks.id"),
         nullable=True,
     )
+    parsed_document_unit_id: Mapped[int | None] = mapped_column(
+        ForeignKey("parsed_document_units.id"),
+        nullable=True,
+    )
     page_number: Mapped[int] = mapped_column(Integer, nullable=False)
     quote: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
@@ -39,5 +43,9 @@ class CardCitation(Base):
     )
     document_chunk: Mapped["DocumentChunk"] = relationship(
         "DocumentChunk",
+        back_populates="citations",
+    )
+    parsed_document_unit: Mapped["ParsedDocumentUnit"] = relationship(
+        "ParsedDocumentUnit",
         back_populates="citations",
     )

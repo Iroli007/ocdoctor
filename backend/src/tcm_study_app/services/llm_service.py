@@ -90,6 +90,7 @@ class LLMService:
 {{
   "acupoint_name": "穴位名称",
   "meridian": "所属经络",
+  "acupoint_property": "穴性或特性",
   "location": "定位",
   "indication": "主治",
   "technique": "刺灸法",
@@ -160,6 +161,36 @@ class LLMService:
                 print(f"Anthropic API error: {e}")
 
         return self._mock_extract_acupuncture_theory(text)
+
+    def extract_needling_technique_card(self, text: str) -> dict[str, Any]:
+        """Extract needling technique card data from raw text."""
+        system_prompt = """你是一个中医针灸学助手。请从刺灸技术文本中提取技术卡，返回纯JSON格式。"""
+
+        user_prompt = f"""从以下文本中提取针灸技术卡信息：
+
+{text}
+
+请返回以下格式的JSON（只返回JSON，不要其他内容）：
+{{
+  "technique_name": "技术名称",
+  "section_title": "所属章节标题",
+  "definition_or_scope": "定义或适用范围",
+  "key_points": "操作要点",
+  "indications": "适应证或适用场景",
+  "contraindications": "禁忌或注意事项",
+  "notes": "其他补充说明"
+}}"""
+
+        if self.anthropic_api_key:
+            try:
+                result = self._call_anthropic(system_prompt, user_prompt)
+                json_match = re.search(r"\{.*\}", result, re.DOTALL)
+                if json_match:
+                    return json.loads(json_match.group())
+            except Exception as e:
+                print(f"Anthropic API error: {e}")
+
+        return self._mock_extract_needling_technique(text)
 
     def extract_warm_disease_card(self, text: str) -> dict[str, Any]:
         """Extract warm disease card data from raw text."""
@@ -314,7 +345,10 @@ class LLMService:
                 block_text,
             )
 
-        meridian_match = re.search(r"(?:经络|归经|所属经脉)[：:]\s*([^\n。；;]+)", block_text)
+        meridian_match = re.search(
+            r"(?:经络|归经|所属经脉)[：:]\s*(.+?)(?=(?:定位|主治|操作|刺灸法|注意|禁忌)[：:【]|\n|$)",
+            block_text,
+        )
         if not meridian_match:
             meridian_match = re.search(
                 r"(手太阴肺经|手阳明大肠经|足阳明胃经|足太阴脾经|手少阴心经|手太阳小肠经|"
@@ -357,6 +391,7 @@ class LLMService:
         return {
             "acupoint_name": name_match.group(1) if name_match else "未知穴位",
             "meridian": meridian,
+            "acupoint_property": self._extract_acupoint_property(compact_block),
             "location": location,
             "indication": indication,
             "technique": technique,
@@ -417,6 +452,16 @@ class LLMService:
             cleaned = re.split(r"。", cleaned, maxsplit=1)[0]
 
         return cleaned.strip(" ；;。")
+
+    def _extract_acupoint_property(self, text: str) -> str | None:
+        """Extract acupoint property labels from OCR text."""
+        matches = re.findall(
+            r"(井穴|荥穴|荣穴|输穴|俞穴|原穴|经穴|合穴|络穴|郄穴|募穴|下合穴|交会穴|八会穴|八脉交会穴)",
+            text,
+        )
+        if not matches:
+            return None
+        return "、".join(dict.fromkeys(matches))
 
     def _mock_extract_warm_disease(self, text: str) -> dict[str, Any]:
         """Mock warm disease extraction for MVP."""
@@ -551,6 +596,34 @@ class LLMService:
             "category": category,
             "core_points": core_points,
             "exam_focus": exam_focus,
+        }
+
+    def _mock_extract_needling_technique(self, text: str) -> dict[str, Any]:
+        """Mock extraction for needling technique cards."""
+        compact_text = re.sub(r"\s+", " ", text).strip()
+        first_line = next((line.strip() for line in text.splitlines() if line.strip()), compact_text[:24])
+        technique_match = re.search(
+            r"([\u4e00-\u9fa5]{2,12}(?:针法|灸法|拔罐法|耳针法|头针法|电针法|毫针法))",
+            compact_text,
+        )
+        definition = self._extract_generic_labeled_segment(text, ("定义", "概念", "适用范围"))
+        key_points = self._extract_generic_labeled_segment(text, ("操作", "方法", "要点"))
+        indications = self._extract_generic_labeled_segment(text, ("适应证", "主治", "适用"))
+        contraindications = self._extract_generic_labeled_segment(text, ("禁忌", "注意事项", "注意"))
+        notes = self._extract_generic_labeled_segment(text, ("补充", "说明", "备注"))
+        if not definition:
+            sentences = re.split(r"[。；;]", compact_text)
+            informative = [sentence.strip() for sentence in sentences if len(sentence.strip()) >= 8]
+            definition = informative[0] if informative else None
+
+        return {
+            "technique_name": technique_match.group(1) if technique_match else first_line[:12],
+            "section_title": first_line[:24] if first_line else None,
+            "definition_or_scope": definition,
+            "key_points": key_points,
+            "indications": indications,
+            "contraindications": contraindications,
+            "notes": notes,
         }
 
     def _mock_generate_comparison(

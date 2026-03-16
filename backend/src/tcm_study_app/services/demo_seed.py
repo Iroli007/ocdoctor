@@ -53,9 +53,9 @@ DEMO_COLLECTIONS = [
     {
         "title": "针灸学",
         "subject": "针灸学",
-        "description": "演示穴位基础卡、引用页码与导出。",
+        "description": "演示经络腧穴卡、引用页码与导出。",
         "document_name": "针灸学-常用穴讲义.pdf",
-        "template_key": "acupoint_foundation",
+        "template_key": "acupoint_knowledge",
         "text": """
 合谷穴
 经络：手阳明大肠经

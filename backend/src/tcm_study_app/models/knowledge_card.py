@@ -51,6 +51,27 @@ class KnowledgeCard(Base):
         cascade="all, delete-orphan",
         single_parent=True,
     )
+    acupoint_knowledge_card: Mapped["AcupointKnowledgeCard"] = relationship(
+        "AcupointKnowledgeCard",
+        back_populates="knowledge_card",
+        uselist=False,
+        cascade="all, delete-orphan",
+        single_parent=True,
+    )
+    needling_technique_card: Mapped["NeedlingTechniqueCard"] = relationship(
+        "NeedlingTechniqueCard",
+        back_populates="knowledge_card",
+        uselist=False,
+        cascade="all, delete-orphan",
+        single_parent=True,
+    )
+    condition_treatment_card: Mapped["ConditionTreatmentCard"] = relationship(
+        "ConditionTreatmentCard",
+        back_populates="knowledge_card",
+        uselist=False,
+        cascade="all, delete-orphan",
+        single_parent=True,
+    )
     warm_disease_card: Mapped["WarmDiseaseCard"] = relationship(
         "WarmDiseaseCard",
         back_populates="knowledge_card",

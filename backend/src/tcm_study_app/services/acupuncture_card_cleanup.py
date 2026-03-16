@@ -64,6 +64,9 @@ _FALLBACK_NUMBERED_NAME_PATTERN = re.compile(
     r"([\u4e00-\u9fa5]{2,5})(?=(?:\*|【|［|[，。,；;]|\s|$))"
 )
 _KNOWN_LABELS = ("定位", "主治", "操作", "刺灸法", "注意", "禁忌", "解剖", "经络", "归经")
+_PROPERTY_PATTERN = re.compile(
+    r"(井穴|荥穴|荣穴|输穴|俞穴|原穴|经穴|合穴|络穴|郄穴|募穴|下合穴|交会穴|八会穴|八脉交会穴)"
+)
 
 
 def _clean_text(value: str | None) -> str | None:
@@ -86,6 +89,8 @@ def _normalize_known_name(name: str | None) -> str | None:
     if not name:
         return None
     cleaned = re.sub(r"\s+", "", name)
+    if cleaned.endswith("穴") and len(cleaned) > 2:
+        cleaned = cleaned[:-1]
     return _OCR_NAME_CORRECTIONS.get(cleaned, cleaned)
 
 
@@ -129,11 +134,16 @@ def clean_acupuncture_card_payload(
     cleaned = {
         "acupoint_name": acupoint_name,
         "meridian": _clean_field_prefix(payload.get("meridian")),
+        "acupoint_property": _clean_field_prefix(payload.get("acupoint_property")),
         "location": _clean_field_prefix(payload.get("location")),
         "indication": _clean_field_prefix(payload.get("indication")),
         "technique": _clean_field_prefix(payload.get("technique")),
         "caution": _clean_field_prefix(payload.get("caution")),
     }
+    if not cleaned["acupoint_property"] and source_text:
+        properties = _PROPERTY_PATTERN.findall(source_text)
+        if properties:
+            cleaned["acupoint_property"] = "、".join(dict.fromkeys(properties))
     return cleaned
 
 

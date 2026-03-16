@@ -1,12 +1,15 @@
 """Schemas package."""
 from tcm_study_app.schemas.card_schema import (
     AcupunctureCardData,
+    AcupointKnowledgeCardData,
     CardCitationResponse,
+    ConditionTreatmentCardData,
     FormulaCardData,
     GenerateCardsRequest,
     GenerateCardsResponse,
     KnowledgeCardCreate,
     KnowledgeCardResponse,
+    NeedlingTechniqueCardData,
     SetCardImportanceRequest,
     SubjectResponse,
     WarmDiseaseCardData,
@@ -21,6 +24,9 @@ from tcm_study_app.schemas.document_schema import (
     DocumentChunkResponse,
     DocumentDetailResponse,
     DocumentResponse,
+    OCRBlockResponse,
+    OCRPageResponse,
+    ParsedDocumentUnitResponse,
 )
 from tcm_study_app.schemas.import_schema import (
     ImportImageRequest,
@@ -44,6 +50,9 @@ __all__ = [
     "OCRResultRequest",
     "FormulaCardData",
     "AcupunctureCardData",
+    "AcupointKnowledgeCardData",
+    "NeedlingTechniqueCardData",
+    "ConditionTreatmentCardData",
     "WarmDiseaseCardData",
     "CardCitationResponse",
     "GenerateCardsRequest",
@@ -57,6 +66,9 @@ __all__ = [
     "DocumentChunkResponse",
     "DocumentResponse",
     "DocumentDetailResponse",
+    "OCRBlockResponse",
+    "OCRPageResponse",
+    "ParsedDocumentUnitResponse",
     "CardTemplateResponse",
     "CollectionExportResponse",
 ]

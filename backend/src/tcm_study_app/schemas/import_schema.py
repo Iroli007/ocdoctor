@@ -40,6 +40,10 @@ class ImportPdfResponse(BaseModel):
     status: str
     chunk_count: int
     page_count: int
+    book_section: str | None = None
+    parsed_unit_count: int = 0
+    page_kind_breakdown: dict[str, int] = {}
+    unit_breakdown: dict[str, int] = {}
 
 
 class OCRPageInput(BaseModel):
