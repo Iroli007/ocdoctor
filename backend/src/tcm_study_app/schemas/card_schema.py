@@ -112,3 +112,37 @@ class CardCitationResponse(BaseModel):
 
 
 KnowledgeCardResponse.model_rebuild()
+
+
+# Card Request schemas
+class CardRequestCreate(BaseModel):
+    """Request schema for creating a card request."""
+
+    requested_name: str
+    collection_id: int | None = None
+    source_document_id: int | None = None
+    chapter_info: str | None = None
+    notes: str | None = None
+
+
+class CardRequestUpdate(BaseModel):
+    """Request schema for updating a card request."""
+
+    status: str | None = None
+    notes: str | None = None
+
+
+class CardRequestResponse(BaseModel):
+    """Response schema for a card request."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    user_id: int
+    collection_id: int | None = None
+    source_document_id: int | None = None
+    requested_name: str
+    chapter_info: str | None = None
+    notes: str | None = None
+    status: str
+    created_at: datetime

@@ -9,6 +9,7 @@ from fastapi.staticfiles import StaticFiles
 
 from tcm_study_app.api import (
     cards_router,
+    card_requests_router,
     collections_router,
     documents_router,
     health_router,
@@ -68,6 +69,7 @@ app.include_router(collections_router)
 app.include_router(import_router)
 app.include_router(documents_router)
 app.include_router(cards_router)
+app.include_router(card_requests_router)
 app.include_router(users_router)
 
 app.mount("/assets", StaticFiles(directory=FRONTEND_DIR / "assets"), name="assets")

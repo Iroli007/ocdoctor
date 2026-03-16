@@ -1,6 +1,7 @@
 """Models package."""
 from tcm_study_app.models.acupuncture_card import AcupunctureCard
 from tcm_study_app.models.card_citation import CardCitation
+from tcm_study_app.models.card_request import CardRequest
 from tcm_study_app.models.collection import StudyCollection
 from tcm_study_app.models.comparison_item import ComparisonItem
 from tcm_study_app.models.document_chunk import DocumentChunk
@@ -21,6 +22,7 @@ __all__ = [
     "DocumentChunk",
     "KnowledgeCard",
     "CardCitation",
+    "CardRequest",
     "FormulaCard",
     "AcupunctureCard",
     "WarmDiseaseCard",

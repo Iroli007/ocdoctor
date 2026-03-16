@@ -27,3 +27,6 @@ class User(Base):
     review_records: Mapped[list["ReviewRecord"]] = relationship(
         "ReviewRecord", back_populates="user", cascade="all, delete-orphan"
     )
+    card_requests: Mapped[list["CardRequest"]] = relationship(
+        "CardRequest", back_populates="user", cascade="all, delete-orphan"
+    )

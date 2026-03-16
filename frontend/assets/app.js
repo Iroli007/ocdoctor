@@ -643,9 +643,174 @@ async function bootstrapWorkspace() {
       userDisplay.onclick = switchUser;
     }
 
+    // Register request button
+    const registerRequestButton = document.getElementById("register-request-button");
+    if (registerRequestButton) {
+      registerRequestButton.onclick = openCardRequestModal;
+    }
+
+    // My requests button
+    const myRequestsBtn = document.getElementById("my-requests-btn");
+    if (myRequestsBtn) {
+      myRequestsBtn.onclick = openMyRequestsModal;
+    }
+
+    // Card request form
+    const cardRequestForm = document.getElementById("card-request-form");
+    if (cardRequestForm) {
+      cardRequestForm.onsubmit = submitCardRequest;
+    }
+
+    // Modal close buttons
+    document.querySelectorAll(".modal-close, .modal-cancel, .modal-backdrop").forEach((el) => {
+      el.addEventListener("click", (e) => {
+        if (e.target.closest("#card-request-modal")) {
+          closeCardRequestModal();
+        }
+        if (e.target.closest("#my-requests-modal")) {
+          closeMyRequestsModal();
+        }
+      });
+    });
+
     setStatus("准备就绪，可以开始随机抽卡。");
   } catch (error) {
     setStatus(`初始化失败：${error.message}`);
+  }
+}
+
+// Card Request functions
+function openCardRequestModal() {
+  const modal = document.getElementById("card-request-modal");
+  if (modal) {
+    modal.classList.remove("hidden");
+    document.getElementById("requested-name").focus();
+  }
+}
+
+function closeCardRequestModal() {
+  const modal = document.getElementById("card-request-modal");
+  if (modal) {
+    modal.classList.add("hidden");
+    document.getElementById("card-request-form").reset();
+  }
+}
+
+async function submitCardRequest(event) {
+  event.preventDefault();
+  const form = event.target;
+  const userId = state.currentUserId || 1;
+
+  const requestedName = form.requested_name.value.trim();
+  const chapterInfo = form.chapter_info.value.trim();
+  const notes = form.notes.value.trim();
+
+  if (!requestedName) {
+    setStatus("请输入希望学习的卡片名称。");
+    return;
+  }
+
+  try {
+    setStatus("正在提交登记...");
+    const cardRequest = await api("/api/card-requests", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        requested_name: requestedName,
+        chapter_info: chapterInfo || null,
+        notes: notes || null,
+        collection_id: state.activeCollectionId,
+      }),
+    });
+    closeCardRequestModal();
+    setStatus(`已成功登记「${requestedName}」，我们会尽快处理。`);
+  } catch (error) {
+    setStatus(`登记失败：${error.message}`);
+  }
+}
+
+async function loadMyRequests() {
+  const userId = state.currentUserId || 1;
+  return api(`/api/card-requests?user_id=${userId}`);
+}
+
+function renderMyRequests(requests) {
+  const container = document.getElementById("my-requests-list");
+  if (!container) return;
+
+  if (!requests.length) {
+    container.innerHTML = '<div class="empty-requests">暂无缺口登记</div>';
+    return;
+  }
+
+  container.innerHTML = requests
+    .map(
+      (req) => `
+      <div class="request-item">
+        <div class="request-header">
+          <span class="request-title">${escapeHtml(req.requested_name)}</span>
+          <span class="request-status ${req.status}">${req.status === "pending" ? "待处理" : req.status === "acknowledged" ? "已确认" : "已处理"}</span>
+        </div>
+        ${req.chapter_info ? `<div class="request-meta">${escapeHtml(req.chapter_info)}</div>` : ""}
+        ${req.notes ? `<div class="request-notes">${escapeHtml(req.notes)}</div>` : ""}
+        <div class="request-meta">登记时间：${new Date(req.created_at).toLocaleDateString("zh-CN")}</div>
+        ${
+          req.status === "pending"
+            ? `
+          <div class="request-actions">
+            <button type="button" class="btn-secondary" data-cancel-request="${req.id}">取消登记</button>
+          </div>
+        `
+            : ""
+        }
+      </div>
+    `,
+    )
+    .join("");
+
+  container.querySelectorAll("[data-cancel-request]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const requestId = Number(button.dataset.cancelRequest);
+      await cancelCardRequest(requestId);
+    });
+  });
+}
+
+async function cancelCardRequest(requestId) {
+  try {
+    setStatus("正在取消登记...");
+    await api(`/api/card-requests/${requestId}?user_id=${state.currentUserId || 1}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: "cancelled" }),
+    });
+    const requests = await loadMyRequests();
+    renderMyRequests(requests);
+    setStatus("已取消登记。");
+  } catch (error) {
+    setStatus(`取消失败：${error.message}`);
+  }
+}
+
+async function openMyRequestsModal() {
+  const modal = document.getElementById("my-requests-modal");
+  if (!modal) return;
+
+  try {
+    setStatus("正在加载缺口登记...");
+    const requests = await loadMyRequests();
+    renderMyRequests(requests);
+    modal.classList.remove("hidden");
+    setStatus("");
+  } catch (error) {
+    setStatus(`加载失败：${error.message}`);
+  }
+}
+
+function closeMyRequestsModal() {
+  const modal = document.getElementById("my-requests-modal");
+  if (modal) {
+    modal.classList.add("hidden");
   }
 }
 

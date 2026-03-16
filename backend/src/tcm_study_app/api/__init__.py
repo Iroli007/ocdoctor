@@ -1,5 +1,6 @@
 """API package."""
 from tcm_study_app.api.routes_cards import router as cards_router
+from tcm_study_app.api.routes_card_requests import router as card_requests_router
 from tcm_study_app.api.routes_collections import router as collections_router
 from tcm_study_app.api.routes_documents import router as documents_router
 from tcm_study_app.api.routes_health import router as health_router
@@ -14,6 +15,7 @@ __all__ = [
     "import_router",
     "documents_router",
     "cards_router",
+    "card_requests_router",
     "subjects_router",
     "templates_router",
     "users_router",
