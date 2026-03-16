@@ -26,6 +26,9 @@ from tcm_study_app.services.acupuncture_card_cleanup import (
     clean_acupuncture_card_payload,
     is_valid_acupuncture_card_payload,
 )
+from tcm_study_app.services.acupuncture_source_classifier import (
+    classify_acupuncture_source,
+)
 from tcm_study_app.services.card_pool import select_weighted_card_batch
 from tcm_study_app.services.clinical_card_cleanup import (
     clean_clinical_card_payload,
@@ -207,6 +210,18 @@ def _serialize_card(
             **cleaned,
         }
 
+    if subject.key == "acupuncture" and source_document_name:
+        source_meta = classify_acupuncture_source(
+            source_document_name,
+            text=_clinical_source_text(card),
+        )
+        normalized_content = {
+            **(normalized_content or {}),
+            "_source_book": source_meta.book_label,
+            "_book_part": source_meta.book_part,
+            "_source_style": source_meta.source_style,
+        }
+
     return KnowledgeCardResponse(
         id=card.id,
         title=title,
@@ -293,7 +308,7 @@ def _card_quality_score(card: KnowledgeCardResponse) -> int:
     field_count = sum(
         1
         for key, value in normalized_content.items()
-        if value and key not in {"template_key", "template_label"}
+        if value and key not in {"template_key", "template_label"} and not str(key).startswith("_")
     )
     citation_count = len(card.citations)
     return field_count * 10 + citation_count
@@ -323,6 +338,18 @@ def _load_serialized_cards(
         query = query.filter(KnowledgeCard.category == template_key)
     query = query.order_by(KnowledgeCard.created_at.desc())
     serialized = _serialize_card_list(query.all(), db, user_id)
+    if any(card.subject_key == "acupuncture" for card in serialized):
+        has_clinical_source = any(
+            (card.normalized_content or {}).get("_source_book") == "临床针灸学"
+            for card in serialized
+        )
+        if has_clinical_source:
+            serialized = [
+                card
+                for card in serialized
+                if card.subject_key != "acupuncture"
+                or (card.normalized_content or {}).get("_source_book") == "临床针灸学"
+            ]
     return _dedupe_response_cards(serialized)
 
 

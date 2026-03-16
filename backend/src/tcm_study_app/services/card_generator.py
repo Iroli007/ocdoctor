@@ -11,6 +11,7 @@ from tcm_study_app.services.acupuncture_card_cleanup import (
     clean_acupuncture_card_payload,
     is_valid_acupuncture_card_payload,
 )
+from tcm_study_app.services.acupuncture_source_classifier import classify_acupuncture_source
 from tcm_study_app.services.clinical_card_cleanup import (
     clean_clinical_card_payload,
     extract_clinical_disease_name,
@@ -54,6 +55,11 @@ class CardGenerator:
 
         subject = get_subject_definition(collection.subject)
         template = get_card_template(template_key, subject.key)
+        source_meta = (
+            classify_acupuncture_source(document.image_url or "", text=document.raw_text)
+            if subject.key == "acupuncture"
+            else None
+        )
         chunks = sorted(
             document.chunks,
             key=lambda item: (item.page_number, item.chunk_index),
@@ -92,6 +98,14 @@ class CardGenerator:
                 "template_label": template.label,
                 **filtered,
             }
+            if source_meta is not None:
+                normalized_content.update(
+                    {
+                        "_source_book": source_meta.book_label,
+                        "_book_part": source_meta.book_part,
+                        "_source_style": source_meta.source_style,
+                    }
+                )
 
             knowledge_card = KnowledgeCard(
                 collection_id=document.collection_id,

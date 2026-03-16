@@ -67,3 +67,36 @@ def test_acupuncture_card_cleanup_recovers_numbered_name_without_pinyin():
 
     assert cleaned["acupoint_name"] == "迎香"
     assert is_valid_acupuncture_card_payload(cleaned) is True
+
+
+def test_acupuncture_card_cleanup_corrects_common_ocr_variants():
+    cleaned = clean_acupuncture_card_payload(
+        {
+            "acupoint_name": "瘦脉",
+            "meridian": "手少阳三焦经",
+            "location": "在头部，乳突中央",
+            "indication": "头痛，耳鸣",
+            "technique": "平刺0.3-0.5寸",
+            "caution": None,
+        },
+        source_text="18.瘦脉 在头部，乳突中央，角孙与翳风沿耳轮弧形连线的中、下1/3的交点处。",
+    )
+
+    assert cleaned["acupoint_name"] == "瘈脉"
+    assert is_valid_acupuncture_card_payload(cleaned) is True
+
+
+def test_acupuncture_card_cleanup_recovers_suffix_lost_name():
+    cleaned = clean_acupuncture_card_payload(
+        {
+            "acupoint_name": "耳和",
+            "meridian": "手少阳三焦经",
+            "location": "在头部，鬓发后缘",
+            "indication": "口喎，牙关紧闭",
+            "technique": "斜刺或平刺0.3-0.5寸",
+            "caution": None,
+        },
+        source_text="22.耳和 在头部，鬓发后缘，平耳廓根之前方。",
+    )
+
+    assert cleaned["acupoint_name"] == "耳和髎"

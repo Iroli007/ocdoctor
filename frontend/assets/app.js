@@ -99,7 +99,7 @@ function pickBetterCard(current, candidate) {
   }
   const scoreCard = (card) => {
     const fieldCount = Object.entries(card.normalized_content || {}).filter(
-      ([key, value]) => value && !["template_key", "template_label"].includes(key),
+      ([key, value]) => isVisibleCardField(key, value),
     ).length;
     const citationCount = card.citations?.length || 0;
     return fieldCount * 10 + citationCount;
@@ -148,6 +148,22 @@ const fieldLabels = {
   formula: "方药",
   differentiation: "辨证要点",
 };
+
+const hiddenCardFields = new Set([
+  "template_key",
+  "template_label",
+  "_source_book",
+  "_book_part",
+  "_source_style",
+]);
+
+function isVisibleCardField(key, value) {
+  return Boolean(value) && !hiddenCardFields.has(key);
+}
+
+function isClinicalAcupunctureDocument(document) {
+  return /^\d{2}_/.test(document.file_name || "") || (document.file_name || "").includes("临床针灸学");
+}
 
 async function api(path, options = {}) {
   const response = await fetch(path, {
@@ -481,7 +497,7 @@ function renderCards() {
   state.activeCardId = card.id;
 
   const detailRows = Object.entries(card.normalized_content || {})
-    .filter(([key, value]) => value && !["template_key", "template_label"].includes(key))
+    .filter(([key, value]) => isVisibleCardField(key, value))
     .map(
       ([key, value]) => `
         <div class="detail-row">
@@ -586,7 +602,11 @@ async function loadDocumentsForActiveCollection() {
       api(`/api/documents?collection_id=${collectionId}`),
     ),
   );
-  return dedupeDocuments(documents.flat());
+  const merged = dedupeDocuments(documents.flat());
+  if (active.subject_key === "acupuncture") {
+    return merged.filter(isClinicalAcupunctureDocument);
+  }
+  return merged;
 }
 
 function resetTemplateCardCache() {

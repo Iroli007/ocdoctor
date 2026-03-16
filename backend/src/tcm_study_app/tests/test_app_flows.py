@@ -1,6 +1,8 @@
 """API flow tests for the knowledge-library app."""
 from types import SimpleNamespace
 
+import tcm_study_app.main as main_module
+from tcm_study_app.models import KnowledgeCard
 from tcm_study_app.services.card_generator import CardGenerator
 from tcm_study_app.services.document_library import DocumentLibrary
 
@@ -132,6 +134,89 @@ def test_delete_document_removes_generated_cards(client):
     cards_response = client.get(f"/api/cards?collection_id={collection['id']}")
     assert cards_response.status_code == 200
     assert cards_response.json() == []
+
+
+def test_acupuncture_card_listing_keeps_only_clinical_book_sources(client):
+    """Acupuncture card APIs should now hide the older non-clinical textbook cards."""
+    collection = _create_collection(client, "针灸学·来源过滤", "针灸学")
+
+    clinical_import = client.post(
+        "/api/import/ocr-pages",
+        json={
+            "collection_id": collection["id"],
+            "file_name": "04_第三章_经络腧穴各论.pdf",
+            "pages": [
+                {
+                    "page_number": 1,
+                    "text": (
+                        "表3-3 手太阴肺经腧穴 序号 穴名 定位 主治 刺灸 "
+                        "4 侠白 上臂内侧，肱二头肌桡侧缘处 干呕，肺系病证 直刺0.5～1寸 "
+                        "5 尺泽 肘横纹上，肱二头肌腱桡侧缘凹陷中 肺系实热，中暑 直刺0.8～1.2寸"
+                    ),
+                }
+            ],
+        },
+    )
+    assert clinical_import.status_code == 200
+
+    standard_import = client.post(
+        "/api/import/ocr-pages",
+        json={
+            "collection_id": collection["id"],
+            "file_name": "015_第二节_手阳明大肠经及其腧穴.pdf",
+            "pages": [
+                {
+                    "page_number": 1,
+                    "text": (
+                        "四、本经腧穴(20穴) "
+                        "1.商阳*(Shangyang, LI1)井穴 "
+                        "【定位】在手指，食指末节桡侧，指甲根角侧上方0.1寸。 "
+                        "【主治】齿痛、咽喉肿痛、热病、昏迷。 "
+                        "【操作】浅刺0.1寸，或点刺出血。 "
+                        "4.合谷*(Hegu, LI4)原穴 "
+                        "【定位】在手背，第2掌骨桡侧的中点处。 "
+                        "【主治】头痛、目赤肿痛、齿痛、鼻衄。 "
+                        "【操作】直刺0.5～1寸，孕妇不宜针。"
+                    ),
+                }
+            ],
+        },
+    )
+    assert standard_import.status_code == 200
+
+    session = main_module.SessionLocal()
+    try:
+        session.add(
+            KnowledgeCard(
+                collection_id=collection["id"],
+                source_document_id=clinical_import.json()["document_id"],
+                title="侠白",
+                category="acupoint_foundation",
+                raw_excerpt="4 侠白 上臂内侧，肱二头肌桡侧缘处",
+                normalized_content_json='{"template_key":"acupoint_foundation","template_label":"穴位基础卡","acupoint_name":"侠白","meridian":"手太阴肺经","location":"上臂内侧，肱二头肌桡侧缘处","indication":"干呕，肺系病证","technique":"直刺0.5～1寸"}',
+            )
+        )
+        session.add(
+            KnowledgeCard(
+                collection_id=collection["id"],
+                source_document_id=standard_import.json()["document_id"],
+                title="商阳",
+                category="acupoint_foundation",
+                raw_excerpt="1.商阳*(Shangyang, LI1)井穴",
+                normalized_content_json='{"template_key":"acupoint_foundation","template_label":"穴位基础卡","acupoint_name":"商阳","meridian":"手阳明大肠经","location":"在手指，食指末节桡侧，指甲根角侧上方0.1寸","indication":"齿痛、咽喉肿痛","technique":"浅刺0.1寸"}',
+            )
+        )
+        session.commit()
+    finally:
+        session.close()
+
+    cards_response = client.get(
+        f"/api/cards?collection_id={collection['id']}&user_id=1&template_key=acupoint_foundation"
+    )
+    assert cards_response.status_code == 200
+    titles = [item["title"] for item in cards_response.json()]
+    assert "侠白" in titles
+    assert "商阳" not in titles
 
 
 def test_import_pdf_rejects_oversized_upload(client):

@@ -42,6 +42,13 @@ _BLOCKED_NAME_SUBSTRINGS = (
     "腧穴",
     "喻穴",
 )
+_OCR_NAME_CORRECTIONS = {
+    "瘦脉": "瘈脉",
+    "澳脉": "瘈脉",
+    "预息": "颅息",
+    "耳和": "耳和髎",
+    "四澳": "四渎",
+}
 _FALLBACK_NAME_PATTERN = re.compile(
     r"(?:^|[。；;\s])(?:\d+\.)?\s*([\u4e00-\u9fa5]{1,8})(?:\*|\s)*\([^)]*[A-Za-z]{1,3}\s*\d+[^)]*\)"
 )
@@ -68,10 +75,17 @@ def _clean_field_prefix(value: str | None) -> str | None:
     return cleaned.strip(" ；;。,:：、") or None
 
 
+def _normalize_known_name(name: str | None) -> str | None:
+    if not name:
+        return None
+    cleaned = re.sub(r"\s+", "", name)
+    return _OCR_NAME_CORRECTIONS.get(cleaned, cleaned)
+
+
 def _looks_like_valid_name(name: str | None) -> bool:
     if not name:
         return False
-    cleaned = re.sub(r"\s+", "", name)
+    cleaned = _normalize_known_name(name) or ""
     if not 2 <= len(cleaned) <= 5:
         return False
     if cleaned in _BLOCKED_NAME_EXACT:
@@ -88,16 +102,22 @@ def clean_acupuncture_card_payload(
 ) -> dict[str, str | None]:
     """Normalize acupoint card fields and recover the point name when possible."""
     acupoint_name = _clean_field_prefix(payload.get("acupoint_name"))
+    acupoint_name = _normalize_known_name(acupoint_name)
     if not _looks_like_valid_name(acupoint_name) and source_text:
         normalized_source = re.sub(r"\s+", " ", source_text)
         for pattern in (_FALLBACK_NAME_PATTERN, _FALLBACK_NUMBERED_NAME_PATTERN):
             match = pattern.search(normalized_source)
             if not match:
                 continue
-            candidate = _clean_field_prefix(match.group(1))
+            candidate = _normalize_known_name(_clean_field_prefix(match.group(1)))
             if _looks_like_valid_name(candidate):
                 acupoint_name = candidate
                 break
+        if not _looks_like_valid_name(acupoint_name):
+            for wrong, correct in _OCR_NAME_CORRECTIONS.items():
+                if wrong in normalized_source:
+                    acupoint_name = correct
+                    break
 
     cleaned = {
         "acupoint_name": acupoint_name,
