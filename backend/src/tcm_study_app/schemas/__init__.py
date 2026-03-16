@@ -7,6 +7,7 @@ from tcm_study_app.schemas.card_schema import (
     GenerateCardsResponse,
     KnowledgeCardCreate,
     KnowledgeCardResponse,
+    SetCardImportanceRequest,
     SubjectResponse,
     WarmDiseaseCardData,
 )
@@ -31,23 +32,6 @@ from tcm_study_app.schemas.import_schema import (
     OCRPageInput,
     OCRResultRequest,
 )
-from tcm_study_app.schemas.quiz_schema import (
-    ComparisonItemResponse,
-    ComparisonPoint,
-    GenerateComparisonRequest,
-    GenerateQuizPaperRequest,
-    GenerateQuizRequest,
-    QuizOption,
-    QuizPaperQuestionResponse,
-    QuizPaperResponse,
-    QuizPaperSectionResponse,
-    QuizResponse,
-)
-from tcm_study_app.schemas.review_schema import (
-    ReviewRecordResponse,
-    ReviewStats,
-    SubmitReviewRequest,
-)
 
 __all__ = [
     "ImportTextRequest",
@@ -66,6 +50,7 @@ __all__ = [
     "GenerateCardsResponse",
     "KnowledgeCardCreate",
     "KnowledgeCardResponse",
+    "SetCardImportanceRequest",
     "SubjectResponse",
     "CollectionCreateRequest",
     "CollectionResponse",
@@ -74,17 +59,4 @@ __all__ = [
     "DocumentDetailResponse",
     "CardTemplateResponse",
     "CollectionExportResponse",
-    "ComparisonPoint",
-    "GenerateComparisonRequest",
-    "ComparisonItemResponse",
-    "GenerateQuizPaperRequest",
-    "GenerateQuizRequest",
-    "QuizResponse",
-    "QuizOption",
-    "QuizPaperQuestionResponse",
-    "QuizPaperSectionResponse",
-    "QuizPaperResponse",
-    "SubmitReviewRequest",
-    "ReviewRecordResponse",
-    "ReviewStats",
 ]

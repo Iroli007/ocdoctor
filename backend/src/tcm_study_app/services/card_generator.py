@@ -1,11 +1,22 @@
 """Card generator service."""
 import json
+import re
+from dataclasses import dataclass
 
 from sqlalchemy.orm import Session
 
 from tcm_study_app.core import get_card_template, get_subject_definition
 from tcm_study_app.models import CardCitation, KnowledgeCard, SourceDocument, StudyCollection
 from tcm_study_app.services.llm_service import llm_service
+
+
+@dataclass(frozen=True)
+class _ExtractableUnit:
+    """A chunk-like extractable text unit used during card generation."""
+
+    chunk_id: int
+    page_number: int
+    content: str
 
 
 class CardGenerator:
@@ -41,10 +52,12 @@ class CardGenerator:
         generated_titles = set()
         generated_cards = []
 
-        for chunk in self._candidate_chunks(subject.key, chunks):
-            extracted = subject.extract(llm_service, chunk.content)
-            title = extracted.get(subject.title_field) or subject.default_title
-            if title == subject.default_title or title in generated_titles:
+        for unit in self._iter_extractable_units(subject.key, template.key, chunks):
+            extracted = self._extract_card(subject.key, template.key, unit.content)
+            title = self._resolve_title(subject, template.key, extracted)
+            if title == self._default_title(subject.key, template.key) or title in generated_titles:
+                continue
+            if not self._passes_subject_quality_gate(subject.key, template.key, title, extracted):
                 continue
 
             filtered = self._filter_template_fields(extracted, template)
@@ -62,20 +75,22 @@ class CardGenerator:
                 source_document_id=document.id,
                 title=title,
                 category=template.key,
-                raw_excerpt=chunk.content[:500],
+                raw_excerpt=unit.content[:500],
                 normalized_content_json=json.dumps(normalized_content, ensure_ascii=False),
             )
             self.db.add(knowledge_card)
             self.db.flush()
 
-            self.db.add(subject.build_record(knowledge_card.id, extracted))
+            record = self._build_subject_record(subject, template.key, knowledge_card.id, extracted)
+            if record is not None:
+                self.db.add(record)
             self.db.add(
                 CardCitation(
                     knowledge_card_id=knowledge_card.id,
                     source_document_id=document.id,
-                    document_chunk_id=chunk.id,
-                    page_number=chunk.page_number,
-                    quote=chunk.content[:800],
+                    document_chunk_id=unit.chunk_id,
+                    page_number=unit.page_number,
+                    quote=unit.content[:800],
                 )
             )
 
@@ -105,18 +120,183 @@ class CardGenerator:
             self.db.delete(card)
         self.db.flush()
 
-    def _candidate_chunks(self, subject_key: str, chunks: list) -> list:
+    def _candidate_chunks(self, subject_key: str, template_key: str, chunks: list) -> list:
         """Keep chunks likely to contain extractable card content."""
-        keywords = {
-            "acupuncture": ("主治", "定位", "刺灸法", "经络", "归经", "穴"),
-            "warm_disease": ("证候", "治法", "方药", "辨证", "阶段", "卫分", "气分"),
-        }.get(subject_key, ())
+        if subject_key == "acupuncture" and template_key == "clinical_treatment":
+            keywords = ("病", "症", "治法", "处方", "取穴", "主穴", "配穴", "加减", "治疗")
+        else:
+            keywords = {
+                "acupuncture": ("主治", "定位", "刺灸法", "经络", "归经", "穴"),
+                "warm_disease": ("证候", "治法", "方药", "辨证", "阶段", "卫分", "气分"),
+            }.get(subject_key, ())
         candidates = [
             chunk
             for chunk in chunks
             if any(keyword in chunk.content for keyword in keywords)
         ]
         return candidates or chunks
+
+    def _iter_extractable_units(
+        self,
+        subject_key: str,
+        template_key: str,
+        chunks: list,
+    ) -> list[_ExtractableUnit]:
+        """Expand source chunks into smaller subject-friendly extraction units."""
+        if subject_key == "acupuncture" and template_key == "clinical_treatment":
+            return self._build_clinical_treatment_units(chunks)
+
+        units: list[_ExtractableUnit] = []
+        for chunk in self._candidate_chunks(subject_key, template_key, chunks):
+            if subject_key == "acupuncture":
+                sub_units = self._split_acupuncture_chunk(chunk.content)
+                if sub_units:
+                    units.extend(
+                        _ExtractableUnit(
+                            chunk_id=chunk.id,
+                            page_number=chunk.page_number,
+                            content=sub_unit,
+                        )
+                        for sub_unit in sub_units
+                    )
+                    continue
+
+            units.append(
+                _ExtractableUnit(
+                    chunk_id=chunk.id,
+                    page_number=chunk.page_number,
+                    content=chunk.content,
+                )
+            )
+        return units
+
+    def _build_clinical_treatment_units(self, chunks: list) -> list[_ExtractableUnit]:
+        """Create single-chunk and adjacent-chunk windows for clinical treatment extraction."""
+        candidates = self._candidate_chunks("acupuncture", "clinical_treatment", chunks)
+        units: list[_ExtractableUnit] = []
+        seen_contents: set[str] = set()
+
+        for index, chunk in enumerate(candidates):
+            single = re.sub(r"\s+", " ", chunk.content).strip()
+            if single and single not in seen_contents:
+                units.append(
+                    _ExtractableUnit(
+                        chunk_id=chunk.id,
+                        page_number=chunk.page_number,
+                        content=single,
+                    )
+                )
+                seen_contents.add(single)
+
+            if index + 1 >= len(candidates):
+                continue
+
+            pair = "\n\n".join(
+                item.content.strip()
+                for item in candidates[index : index + 2]
+                if item.content.strip()
+            ).strip()
+            pair = re.sub(r"\s+", " ", pair)
+            if pair and pair not in seen_contents:
+                units.append(
+                    _ExtractableUnit(
+                        chunk_id=chunk.id,
+                        page_number=chunk.page_number,
+                        content=pair,
+                    )
+                )
+                seen_contents.add(pair)
+
+        return units
+
+    def _extract_card(self, subject_key: str, template_key: str, text: str) -> dict:
+        """Route extraction through the right template-aware extractor."""
+        if subject_key == "acupuncture" and template_key == "clinical_treatment":
+            return llm_service.extract_acupuncture_clinical_card(text)
+
+        subject = get_subject_definition(subject_key)
+        return subject.extract(llm_service, text)
+
+    def _resolve_title(self, subject, template_key: str, extracted: dict) -> str:
+        """Resolve the card title for a subject/template pair."""
+        if subject.key == "acupuncture" and template_key == "clinical_treatment":
+            return extracted.get("disease_name") or "未知病证"
+        return extracted.get(subject.title_field) or subject.default_title
+
+    def _default_title(self, subject_key: str, template_key: str) -> str:
+        """Return the placeholder title for the subject/template pair."""
+        if subject_key == "acupuncture" and template_key == "clinical_treatment":
+            return "未知病证"
+        return get_subject_definition(subject_key).default_title
+
+    def _build_subject_record(
+        self,
+        subject,
+        template_key: str,
+        knowledge_card_id: int,
+        extracted: dict,
+    ):
+        """Create an optional typed record for templates that need one."""
+        if subject.key == "acupuncture" and template_key == "clinical_treatment":
+            return None
+        return subject.build_record(knowledge_card_id, extracted)
+
+    def _passes_subject_quality_gate(
+        self,
+        subject_key: str,
+        template_key: str,
+        title: str,
+        extracted: dict,
+    ) -> bool:
+        """Filter obviously noisy cards before persistence."""
+        if subject_key == "acupuncture" and template_key == "clinical_treatment":
+            blocked_title_patterns = (
+                r"^本病",
+                r"^必要时",
+                r"^用于临床",
+                r"^血管情况",
+                r"^分钟",
+                r"^特殊的",
+                r"^或胀痛",
+                r"^风寒证$",
+                r"^风热证$",
+                r"^风湿证$",
+                r"^肝阳上亢证$",
+                r"^肾虚证$",
+                r"^血虚证$",
+                r"^痰浊证$",
+                r"^血瘀证$",
+                r"^气滞证$",
+                r"^寒凝证$",
+            )
+            if any(re.search(pattern, title) for pattern in blocked_title_patterns):
+                return False
+            if not extracted.get("treatment_principle") or not extracted.get("acupoint_prescription"):
+                return False
+        return True
+
+    def _split_acupuncture_chunk(self, content: str) -> list[str]:
+        """Split OCR textbook prose into one-text-block-per-acupoint."""
+        compact_content = re.sub(r"\s+", " ", content).strip()
+        starts = list(
+            re.finditer(
+                r"(?:^|[。；;\s])\d+\.\s*[\u4e00-\u9fa5]{1,8}(?:\*|\s)*\([^)]*[A-Za-z]{1,3}\s*\d+[^)]*\)",
+                compact_content,
+            )
+        )
+        if not starts:
+            return []
+
+        blocks: list[str] = []
+        for index, match in enumerate(starts):
+            start_index = match.start()
+            if compact_content[start_index].isspace():
+                start_index += 1
+            end_index = starts[index + 1].start() if index + 1 < len(starts) else len(compact_content)
+            block = compact_content[start_index:end_index].strip()
+            if block:
+                blocks.append(block)
+        return blocks
 
     def _filter_template_fields(self, extracted: dict, template) -> dict:
         """Filter the extracted subject payload down to the template fields."""

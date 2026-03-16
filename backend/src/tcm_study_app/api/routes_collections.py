@@ -18,29 +18,18 @@ router = APIRouter(prefix="/api/collections", tags=["collections"])
 
 
 def _ensure_user(db: Session, user_id: int) -> User:
-    """Ensure a demo user exists for the given ID."""
+    """Look up a user by ID; raise 404 if not found."""
     user = db.get(User, user_id)
-    if user:
-        return user
-
-    user = User(
-        id=user_id,
-        email=f"demo{user_id}@example.com",
-        name=f"Demo User {user_id}",
-    )
-    db.add(user)
-    db.commit()
-    db.refresh(user)
+    if not user:
+        raise HTTPException(status_code=404, detail=f"User {user_id} not found")
     return user
 
 
 @router.get("", response_model=list[CollectionResponse])
-async def list_collections(user_id: int = 1, db: Session = Depends(get_db)):
-    """List collections for a user."""
-    _ensure_user(db, user_id)
+async def list_collections(db: Session = Depends(get_db)):
+    """List all collections (visible to every user)."""
     collections = (
         db.query(StudyCollection)
-        .filter(StudyCollection.user_id == user_id)
         .order_by(StudyCollection.created_at.desc())
         .all()
     )

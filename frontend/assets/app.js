@@ -1,5 +1,4 @@
 const state = {
-  subjects: [],
   collections: [],
   documents: [],
   cards: [],
@@ -8,9 +7,9 @@ const state = {
   activeDocumentId: null,
   activeCardId: null,
   activeTemplateKey: null,
+  currentUserId: null,
+  users: [],
 };
-
-const MAX_WEB_PDF_UPLOAD_BYTES = 4 * 1024 * 1024;
 
 const fieldLabels = {
   acupoint_name: "穴位名称",
@@ -19,6 +18,10 @@ const fieldLabels = {
   indication: "主治",
   technique: "刺灸法",
   caution: "注意事项",
+  disease_name: "病证名称",
+  treatment_principle: "治法原则",
+  acupoint_prescription: "处方取穴",
+  notes: "加减按语",
   pattern_name: "证候名称",
   stage: "阶段",
   syndrome: "证候表现",
@@ -74,42 +77,23 @@ function setButtonBusy(button, isBusy, busyLabel) {
 }
 
 function syncCollectionSelects() {
-  const uploadSelect = document.getElementById("upload-collection-select");
   const switcher = document.getElementById("collection-switcher");
   const current = String(state.activeCollectionId || "");
 
-  const optionsHtml = state.collections.length
-    ? state.collections
-        .map(
-          (collection) => `
-            <option value="${collection.id}" ${
-              String(collection.id) === current ? "selected" : ""
-            }>
-              ${escapeHtml(collection.title)}
-            </option>
-          `,
-        )
-        .join("")
-    : '<option value="">暂无集合</option>';
-
-  if (uploadSelect) {
-    uploadSelect.innerHTML = state.collections.length
+  if (switcher) {
+    switcher.innerHTML = state.collections.length
       ? state.collections
           .map(
             (collection) => `
               <option value="${collection.id}" ${
                 String(collection.id) === current ? "selected" : ""
               }>
-                ${escapeHtml(collection.title)} · ${escapeHtml(collection.subject_display_name)}
+                ${escapeHtml(collection.title)}
               </option>
             `,
           )
           .join("")
-      : '<option value="">请先创建集合</option>';
-  }
-
-  if (switcher) {
-    switcher.innerHTML = optionsHtml;
+      : '<option value="">暂无集合</option>';
   }
 }
 
@@ -136,6 +120,24 @@ function pickRandomItem(items) {
   return items[Math.floor(Math.random() * items.length)];
 }
 
+function renderImportanceStars(card) {
+  const current = Number(card.importance_level || 0);
+  return Array.from({ length: 5 }, (_, index) => {
+    const level = index + 1;
+    return `
+      <button
+        type="button"
+        class="importance-star ${level <= current ? "is-active" : ""}"
+        data-importance-level="${level}"
+        aria-label="重要程度 ${level} 星"
+        title="重要程度 ${level} 星"
+      >
+        ★
+      </button>
+    `;
+  }).join("");
+}
+
 function getTemplateCards(templateKey = state.activeTemplateKey) {
   return state.cards.filter((card) => card.template_key === templateKey);
 }
@@ -149,13 +151,21 @@ function getDocumentTemplateScore(document, templateKey, subjectKey) {
   let score = 0;
 
   if (subjectKey === "acupuncture") {
-    if (/【定位】|定位[：:]/.test(haystack)) score += 4;
-    if (/【主治】|主治[：:]/.test(haystack)) score += 4;
-    if (/【操作】|刺灸法|操作[：:]/.test(haystack)) score += 3;
-    if (/\d+\.[\u4e00-\u9fa5]{1,8}(?:\*|\s)*\(/.test(haystack)) score += 4;
-    if (/(LU|LI|ST|SP|HT|SI|BL|KI|PC|SJ|GB|LR|CV|GV)\s?\d+/i.test(haystack)) score += 3;
-    if (/腧穴|俞穴|经穴|原穴|络穴|合穴|井穴|荥穴|输穴|郄穴/.test(haystack)) score += 2;
-    if (/前置页|目录|前言|编写说明|绪论|总论/.test(haystack)) score -= 6;
+    if (templateKey === "clinical_treatment") {
+      if (/病症|诊治|治疗|治法|治则|处方|取穴|主穴|配穴|加减|病机/.test(haystack)) score += 5;
+      if (/疼症|心脑病症|肺系病症|妇儿科病症|五官病症|其他病症/.test(haystack)) score += 4;
+      if (/【定位】|定位[：:]/.test(haystack)) score -= 3;
+      if (/刺灸法|操作[：:]/.test(haystack)) score -= 2;
+      if (/目录|前言|编写说明|绪论|总论/.test(haystack)) score -= 6;
+    } else {
+      if (/【定位】|定位[：:]/.test(haystack)) score += 4;
+      if (/【主治】|主治[：:]/.test(haystack)) score += 4;
+      if (/【操作】|刺灸法|操作[：:]/.test(haystack)) score += 3;
+      if (/\d+\.[\u4e00-\u9fa5]{1,8}(?:\*|\s)*\(/.test(haystack)) score += 4;
+      if (/(LU|LI|ST|SP|HT|SI|BL|KI|PC|SJ|GB|LR|CV|GV)\s?\d+/i.test(haystack)) score += 3;
+      if (/腧穴|俞穴|经穴|原穴|络穴|合穴|井穴|荥穴|输穴|郄穴/.test(haystack)) score += 2;
+      if (/前置页|目录|前言|编写说明|绪论|总论/.test(haystack)) score -= 6;
+    }
   }
 
   if (subjectKey === "warm_disease") {
@@ -223,87 +233,11 @@ function syncBestDocumentSelection() {
   }
 }
 
-function renderSubjects() {
-  const select = document.getElementById("subject-select");
-  if (!select) {
-    return;
-  }
-  select.innerHTML = state.subjects
-    .map(
-      (subject) => `
-        <option value="${escapeHtml(subject.display_name)}">${escapeHtml(subject.display_name)}</option>
-      `,
-    )
-    .join("");
-}
-
-function renderCollections() {
-  const container = document.getElementById("collections-list");
-  if (!container) {
-    return;
-  }
-  if (!state.collections.length) {
-    container.className = "stack-list empty-state";
-    container.textContent = "先创建一个集合。";
-    return;
-  }
-
-  container.className = "stack-list";
-  container.innerHTML = state.collections
-    .map(
-      (collection) => `
-        <article
-          class="list-card ${collection.id === state.activeCollectionId ? "is-active" : ""}"
-          data-collection-id="${collection.id}"
-        >
-          <div class="list-card-top">
-            <span class="chip">${escapeHtml(collection.subject_display_name)}</span>
-            <button
-              type="button"
-              class="delete-button"
-              data-delete-collection-id="${collection.id}"
-            >
-              删除
-            </button>
-          </div>
-          <h3>${escapeHtml(collection.title)}</h3>
-          <p>${escapeHtml(collection.description || "暂无备注")}</p>
-        </article>
-      `,
-    )
-    .join("");
-
-  container.querySelectorAll("[data-collection-id]").forEach((item) => {
-    item.addEventListener("click", async () => {
-      state.activeCollectionId = Number(item.dataset.collectionId);
-      state.activeDocumentId = null;
-      state.activeCardId = null;
-      syncCollectionSelects();
-      await refreshWorkspace();
-    });
-  });
-
-  container.querySelectorAll("[data-delete-collection-id]").forEach((button) => {
-    button.addEventListener("click", async (event) => {
-      event.stopPropagation();
-      await deleteCollection(Number(button.dataset.deleteCollectionId));
-    });
-  });
-}
-
 function renderWorkspaceHeader() {
   const active = getActiveCollection();
   const title = document.getElementById("workspace-title");
   if (title) {
     title.textContent = active ? active.title : "选择一个集合";
-  }
-  const documentCount = document.getElementById("document-count");
-  if (documentCount) {
-    documentCount.textContent = state.documents.length;
-  }
-  const cardCount = document.getElementById("card-count");
-  if (cardCount) {
-    cardCount.textContent = state.cards.length;
   }
 }
 
@@ -340,71 +274,7 @@ function renderTemplates() {
       state.activeCardId = templateCards[0]?.id || null;
       syncBestDocumentSelection();
       renderTemplates();
-      renderDocuments();
       renderCards();
-    });
-  });
-}
-
-function renderDocuments() {
-  const container = document.getElementById("documents-list");
-  if (!container) {
-    return;
-  }
-  if (!state.documents.length) {
-    container.className = "stack-list empty-state";
-    container.textContent = "还没有导入文档。";
-    return;
-  }
-
-  container.className = "stack-list";
-  container.innerHTML = state.documents
-    .map(
-      (document) => `
-        <article
-          class="list-card ${document.id === state.activeDocumentId ? "is-active" : ""}"
-          data-document-id="${document.id}"
-        >
-          <div class="list-card-top">
-            <div class="list-meta">
-              <span class="chip">${escapeHtml(document.type.toUpperCase())}</span>
-              ${
-                getDocumentTemplateScore(
-                  document,
-                  state.activeTemplateKey,
-                  getActiveCollection()?.subject_key,
-                ) > 0
-                  ? '<span class="chip">可抽卡</span>'
-                  : ""
-              }
-              <span>${document.page_count} 页 / ${document.chunk_count} 段</span>
-            </div>
-            <button
-              type="button"
-              class="delete-button"
-              data-delete-document-id="${document.id}"
-            >
-              删除
-            </button>
-          </div>
-          <h3>${escapeHtml(document.file_name)}</h3>
-          <p>${escapeHtml(document.preview || "暂无摘要")}</p>
-        </article>
-      `,
-    )
-    .join("");
-
-  container.querySelectorAll("[data-document-id]").forEach((item) => {
-    item.addEventListener("click", () => {
-      state.activeDocumentId = Number(item.dataset.documentId);
-      renderDocuments();
-    });
-  });
-
-  container.querySelectorAll("[data-delete-document-id]").forEach((button) => {
-    button.addEventListener("click", async (event) => {
-      event.stopPropagation();
-      await deleteDocument(Number(button.dataset.deleteDocumentId));
     });
   });
 }
@@ -454,9 +324,11 @@ function renderCards() {
           <span class="chip">${escapeHtml(card.subject_display_name)}</span>
           <span class="chip">${escapeHtml(findTemplateLabel(card.template_key))}</span>
         </div>
-        <div class="draw-count" title="随机抽到次数">
-          <span class="draw-star">★</span>
-          <strong>${escapeHtml(card.draw_count || 0)}</strong>
+        <div class="importance-picker" title="按重要程度手动标星">
+          <span class="importance-label">重要程度</span>
+          <div class="importance-stars">
+            ${renderImportanceStars(card)}
+          </div>
         </div>
       </div>
       <div class="focus-card-header">
@@ -468,6 +340,11 @@ function renderCards() {
       </div>
     </article>
   `;
+  container.querySelectorAll("[data-importance-level]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      await updateCardImportance(card.id, Number(button.dataset.importanceLevel));
+    });
+  });
   renderCardDetail();
 }
 
@@ -508,22 +385,15 @@ function renderCardDetail() {
   `;
 }
 
-async function loadSubjects() {
-  state.subjects = await api("/api/subjects");
-  renderSubjects();
-}
-
 async function loadCollections() {
   state.collections = await api("/api/collections");
   if (!state.activeCollectionId && state.collections.length) {
     state.activeCollectionId = state.collections[0].id;
   }
   syncCollectionSelects();
-  renderCollections();
 }
 
 async function refreshWorkspace() {
-  renderCollections();
   renderWorkspaceHeader();
 
   const active = getActiveCollection();
@@ -535,13 +405,13 @@ async function refreshWorkspace() {
     state.activeDocumentId = null;
     state.activeCardId = null;
     renderTemplates();
-    renderDocuments();
     renderCards();
     return;
   }
 
+  const userId = state.currentUserId || 1;
   state.documents = await api(`/api/documents?collection_id=${active.id}`);
-  state.cards = await api(`/api/cards?collection_id=${active.id}`);
+  state.cards = await api(`/api/cards?collection_id=${active.id}&user_id=${userId}`);
   state.templates = await api(`/api/templates?subject=${active.subject_key}`);
 
   if (!state.templates.find((template) => template.key === state.activeTemplateKey)) {
@@ -559,108 +429,41 @@ async function refreshWorkspace() {
 
   renderWorkspaceHeader();
   renderTemplates();
-  renderDocuments();
   renderCards();
 }
 
-async function createCollection(event) {
-  event.preventDefault();
-  const formElement = event.currentTarget;
-  const submitButton = formElement.querySelector('button[type="submit"]');
-  const form = new FormData(formElement);
-  const payload = Object.fromEntries(form.entries());
-  payload.user_id = 1;
-
-  try {
-    setButtonBusy(submitButton, true, "创建中...");
-    setStatus("正在创建集合...");
-    await api("/api/collections", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    formElement.reset();
-    await loadCollections();
-    await refreshWorkspace();
-    setStatus(`已创建集合：${payload.title}`);
-  } catch (error) {
-    setStatus(`创建集合失败：${error.message}`);
-  } finally {
-    setButtonBusy(submitButton, false, "创建中...");
-  }
-}
-
-async function deleteCollection(collectionId) {
-  try {
-    setStatus("正在删除集合...");
-    await api(`/api/collections/${collectionId}`, { method: "DELETE" });
-    if (state.activeCollectionId === collectionId) {
-      state.activeCollectionId = null;
-      state.activeDocumentId = null;
-      state.activeCardId = null;
-    }
-    await loadCollections();
-    await refreshWorkspace();
-    setStatus("集合已删除。");
-  } catch (error) {
-    setStatus(`删除集合失败：${error.message}`);
-  }
-}
-
-async function uploadPdf(event) {
-  event.preventDefault();
-  const collectionSelect = document.getElementById("upload-collection-select");
-  const targetCollectionId = Number(collectionSelect.value);
-  if (!targetCollectionId) {
-    setStatus("请先创建或选择一个集合。");
-    return;
-  }
-
-  const formElement = event.currentTarget;
-  const submitButton = formElement.querySelector('button[type="submit"]');
-  const fileInput = document.getElementById("pdf-input");
-  const file = fileInput.files?.[0];
-
-  if (!file) {
-    setStatus("请先选择一个 PDF。");
-    return;
-  }
-  if (file.size > MAX_WEB_PDF_UPLOAD_BYTES) {
-    setStatus(
-      "这个 PDF 超过当前网页文档上传限制。请先压缩或拆分到 4 MB 内；200 MB 这类扫描版教材建议拆分后再用本地导入工具回传。",
-    );
-    return;
-  }
-
-  const formData = new FormData();
-  formData.append("collection_id", String(targetCollectionId));
-  formData.append("file", file);
-
-  try {
-    setButtonBusy(submitButton, true, "导入中...");
-    setStatus("正在解析 PDF...");
-    const payload = await api("/api/import/pdf", {
-      method: "POST",
-      body: formData,
-    });
-    fileInput.value = "";
-    state.activeCollectionId = targetCollectionId;
-    await refreshWorkspace();
-    state.activeDocumentId = payload.document_id;
-    renderDocuments();
-    setStatus(`已导入文档，整理出 ${payload.chunk_count} 个片段，可以直接随机抽卡。`);
-  } catch (error) {
-    setStatus(`导入失败：${error.message}`);
-  } finally {
-    setButtonBusy(submitButton, false, "导入中...");
-  }
-}
-
-async function recordCardDraw(cardId) {
-  const updatedCard = await api(`/api/cards/${cardId}/draw`, { method: "POST" });
+async function updateCardImportance(cardId, importanceLevel) {
+  const userId = state.currentUserId || 1;
+  const updatedCard = await api(`/api/cards/${cardId}/importance?user_id=${userId}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ importance_level: importanceLevel }),
+  });
   state.cards = state.cards.map((card) => (card.id === updatedCard.id ? updatedCard : card));
   state.activeCardId = updatedCard.id;
+  renderCards();
+  setStatus(`已将「${updatedCard.title}」标记为 ${importanceLevel} 星重要程度。`);
   return updatedCard;
+}
+
+async function handleUserSelected(userId) {
+  state.currentUserId = userId;
+  localStorage.setItem("ocdoctor_user_id", userId);
+
+  const overlay = document.getElementById("user-select-overlay");
+  if (overlay) {
+    overlay.classList.add("hidden");
+  }
+
+  renderCurrentUserDisplay();
+
+  if (state.collections.length) {
+    await refreshWorkspace();
+    setStatus("已切换账号。");
+    return;
+  }
+
+  await bootstrapWorkspace();
 }
 
 async function drawRandomCard() {
@@ -677,9 +480,9 @@ async function drawRandomCard() {
     if (existingCards.length) {
       setStatus("正在随机抽卡...");
       const drawnCard = pickRandomItem(existingCards);
-      const updatedCard = await recordCardDraw(drawnCard.id);
+      state.activeCardId = drawnCard.id;
       renderCards();
-      setStatus(`已随机抽到「${updatedCard.title}」。`);
+      setStatus(`已随机抽到「${drawnCard.title}」。`);
       return;
     }
 
@@ -693,13 +496,13 @@ async function drawRandomCard() {
     }
     if (state.activeDocumentId !== activeDocument.id) {
       state.activeDocumentId = activeDocument.id;
-      renderDocuments();
     }
 
     setStatus("正在整理内容并随机抽卡...");
+    const userId = state.currentUserId || 1;
     let payload;
     try {
-      payload = await api("/api/cards/generate", {
+      payload = await api(`/api/cards/generate?user_id=${userId}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -716,9 +519,8 @@ async function drawRandomCard() {
       ) {
         activeDocument = bestAlternative.document;
         state.activeDocumentId = activeDocument.id;
-        renderDocuments();
         setStatus(`当前文档不适合该模板，已自动改用《${activeDocument.file_name}》继续抽卡...`);
-        payload = await api("/api/cards/generate", {
+        payload = await api(`/api/cards/generate?user_id=${userId}`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -730,7 +532,7 @@ async function drawRandomCard() {
         throw error;
       }
     }
-    state.cards = await api(`/api/cards?collection_id=${state.activeCollectionId}`);
+    state.cards = await api(`/api/cards?collection_id=${state.activeCollectionId}&user_id=${userId}`);
     let drawnCard =
       pickRandomItem(
         payload.cards.filter((card) => card.template_key === state.activeTemplateKey),
@@ -738,12 +540,8 @@ async function drawRandomCard() {
       pickRandomItem(getRandomDrawPool()) ||
       state.cards[0] ||
       null;
-    if (drawnCard) {
-      drawnCard = await recordCardDraw(drawnCard.id);
-    }
     state.activeCardId = drawnCard?.id || null;
     renderWorkspaceHeader();
-    renderDocuments();
     renderCards();
     setStatus(
       drawnCard
@@ -757,74 +555,77 @@ async function drawRandomCard() {
   }
 }
 
-async function exportCollection() {
-  const active = getActiveCollection();
-  if (!active) {
-    setStatus("请先选择一个集合。");
-    return;
-  }
+function renderUserSelect() {
+  const overlay = document.getElementById("user-select-overlay");
+  const container = document.getElementById("user-buttons");
+  if (!overlay || !container) return;
 
-  const button = document.getElementById("export-button");
-  try {
-    setButtonBusy(button, true, "导出中...");
-    setStatus("正在导出 Markdown...");
-    const payload = await api(`/api/collections/${active.id}/export`);
-    const blob = new Blob([payload.content], { type: "text/markdown;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = payload.filename;
-    link.click();
-    URL.revokeObjectURL(url);
-    setStatus("导出完成。");
-  } catch (error) {
-    setStatus(`导出失败：${error.message}`);
-  } finally {
-    setButtonBusy(button, false, "导出中...");
-  }
+  container.innerHTML = state.users
+    .map(
+      (user) => `
+      <button type="button" class="user-button user-${user.id}" data-user-id="${user.id}">
+        ${escapeHtml(user.name)}
+      </button>
+    `,
+    )
+    .join("");
+
+  container.querySelectorAll("[data-user-id]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const userId = Number(button.dataset.userId);
+      await handleUserSelected(userId);
+    });
+  });
 }
 
-async function deleteDocument(documentId) {
-  try {
-    setStatus("正在删除文档...");
-    await api(`/api/documents/${documentId}`, { method: "DELETE" });
-    if (state.activeDocumentId === documentId) {
-      state.activeDocumentId = null;
-      state.activeCardId = null;
-    }
-    await refreshWorkspace();
-    setStatus("文档已删除。");
-  } catch (error) {
-    setStatus(`删除文档失败：${error.message}`);
+function renderCurrentUserDisplay() {
+  const display = document.getElementById("current-user-display");
+  if (!display) return;
+  const user = state.users.find((u) => u.id === state.currentUserId);
+  display.textContent = user ? user.name : "未选择";
+  display.title = "点击切换账号";
+}
+
+function switchUser() {
+  const overlay = document.getElementById("user-select-overlay");
+  if (overlay) {
+    overlay.classList.remove("hidden");
   }
+  renderUserSelect();
 }
 
 async function bootstrap() {
+  // First load users
+  try {
+    state.users = await api("/api/users");
+  } catch (error) {
+    setStatus(`加载用户列表失败：${error.message}`);
+    return;
+  }
+
+  // Check for saved user
+  const savedUserId = localStorage.getItem("ocdoctor_user_id");
+  if (savedUserId && state.users.find((u) => u.id === Number(savedUserId))) {
+    await handleUserSelected(Number(savedUserId));
+  } else {
+    // Show user selection
+    renderUserSelect();
+  }
+}
+
+async function bootstrapWorkspace() {
   try {
     setStatus("正在加载知识库...");
-    await loadSubjects();
     await loadCollections();
     await refreshWorkspace();
 
-    const collectionForm = document.getElementById("collection-form");
-    if (collectionForm) {
-      collectionForm.addEventListener("submit", createCollection);
-    }
-    const uploadForm = document.getElementById("upload-form");
-    if (uploadForm) {
-      uploadForm.addEventListener("submit", uploadPdf);
-    }
     const generateButton = document.getElementById("generate-button");
     if (generateButton) {
-      generateButton.addEventListener("click", drawRandomCard);
-    }
-    const exportButton = document.getElementById("export-button");
-    if (exportButton) {
-      exportButton.addEventListener("click", exportCollection);
+      generateButton.onclick = drawRandomCard;
     }
     const collectionSwitcher = document.getElementById("collection-switcher");
     if (collectionSwitcher) {
-      collectionSwitcher.addEventListener("change", async (event) => {
+      collectionSwitcher.onchange = async (event) => {
         const id = Number(event.target.value);
         if (id) {
           state.activeCollectionId = id;
@@ -833,8 +634,15 @@ async function bootstrap() {
           syncCollectionSelects();
           await refreshWorkspace();
         }
-      });
+      };
     }
+
+    // User display click to switch
+    const userDisplay = document.getElementById("current-user-display");
+    if (userDisplay) {
+      userDisplay.onclick = switchUser;
+    }
+
     setStatus("准备就绪，可以开始随机抽卡。");
   } catch (error) {
     setStatus(`初始化失败：${error.message}`);

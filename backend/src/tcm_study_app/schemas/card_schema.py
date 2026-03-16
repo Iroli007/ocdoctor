@@ -64,7 +64,7 @@ class KnowledgeCardResponse(BaseModel):
     category: str
     source_document_id: int | None = None
     source_document_name: str | None = None
-    draw_count: int = 0
+    importance_level: int = 0
     raw_excerpt: str | None = None
     normalized_content: dict[str, Any] | None = None
     citations: list["CardCitationResponse"]
@@ -86,6 +86,12 @@ class GenerateCardsResponse(BaseModel):
 
     cards: list[KnowledgeCardResponse]
     status: str
+
+
+class SetCardImportanceRequest(BaseModel):
+    """Request schema for updating card importance."""
+
+    importance_level: int
 
 
 class SubjectResponse(BaseModel):

@@ -39,6 +39,19 @@ CARD_TEMPLATES: dict[str, list[CardTemplate]] = {
             fields=("acupoint_name", "meridian", "location", "indication"),
             minimum_fields=3,
         ),
+        CardTemplate(
+            key="clinical_treatment",
+            subject_key="acupuncture",
+            label="病证治疗卡",
+            description="适合从临床针灸教材中抽取病证、治法和处方要点。",
+            fields=(
+                "disease_name",
+                "treatment_principle",
+                "acupoint_prescription",
+                "notes",
+            ),
+            minimum_fields=3,
+        ),
     ],
     "warm_disease": [
         CardTemplate(

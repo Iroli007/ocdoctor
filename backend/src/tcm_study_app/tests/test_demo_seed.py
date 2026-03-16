@@ -5,7 +5,7 @@ from sqlalchemy.pool import StaticPool
 
 from tcm_study_app.db.session import Base
 from tcm_study_app.models import CardCitation, DocumentChunk, KnowledgeCard, StudyCollection, User
-from tcm_study_app.services.demo_seed import seed_demo_content
+from tcm_study_app.services.demo_seed import ensure_fixed_users, seed_demo_content
 
 
 def test_seed_demo_content_populates_empty_database():
@@ -77,6 +77,37 @@ def test_seed_demo_content_preserves_existing_user_data():
         assert "我自己的集合" in titles
         assert "温病学" in titles
         assert "针灸学" in titles
+    finally:
+        db.close()
+        Base.metadata.drop_all(bind=engine)
+        engine.dispose()
+
+
+def test_ensure_fixed_users_creates_the_two_local_accounts():
+    """The app should always have the two selectable local users available."""
+    engine = create_engine(
+        "sqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    testing_session_local = sessionmaker(
+        autocommit=False,
+        autoflush=False,
+        bind=engine,
+        class_=Session,
+    )
+    Base.metadata.create_all(bind=engine)
+
+    db = testing_session_local()
+    try:
+        ensure_fixed_users(db)
+        db.commit()
+
+        users = db.query(User).order_by(User.id.asc()).all()
+        assert [(user.id, user.name, user.email) for user in users] == [
+            (1, "从清晨到向晚", "dawn@ocdoctor.local"),
+            (2, "刘正", "liuzheng@ocdoctor.local"),
+        ]
     finally:
         db.close()
         Base.metadata.drop_all(bind=engine)

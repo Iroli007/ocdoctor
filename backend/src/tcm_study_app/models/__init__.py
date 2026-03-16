@@ -10,10 +10,12 @@ from tcm_study_app.models.quiz import Quiz
 from tcm_study_app.models.review_record import ReviewRecord
 from tcm_study_app.models.source_document import SourceDocument
 from tcm_study_app.models.user import User
+from tcm_study_app.models.user_card_importance import UserCardImportance
 from tcm_study_app.models.warm_disease_card import WarmDiseaseCard
 
 __all__ = [
     "User",
+    "UserCardImportance",
     "StudyCollection",
     "SourceDocument",
     "DocumentChunk",

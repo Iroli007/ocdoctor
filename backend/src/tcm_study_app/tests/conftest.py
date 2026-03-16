@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 import tcm_study_app.main as main_module
+import tcm_study_app.services.demo_seed as demo_seed_module
 from tcm_study_app.db import get_db
 from tcm_study_app.db.session import Base
 from tcm_study_app.main import app
@@ -39,9 +40,13 @@ def client() -> Generator[TestClient, None, None]:
 
     app.dependency_overrides[get_db] = override_get_db
     original_init_db = main_module.init_db
+    original_main_session_local = main_module.SessionLocal
+    original_demo_seed_session_local = demo_seed_module.SessionLocal
     original_anthropic_api_key = llm_service.anthropic_api_key
     original_openai_api_key = llm_service.openai_api_key
     main_module.init_db = lambda: Base.metadata.create_all(bind=engine)
+    main_module.SessionLocal = testing_session_local
+    demo_seed_module.SessionLocal = testing_session_local
     llm_service.anthropic_api_key = None
     llm_service.openai_api_key = None
 
@@ -50,6 +55,8 @@ def client() -> Generator[TestClient, None, None]:
 
     app.dependency_overrides.clear()
     main_module.init_db = original_init_db
+    main_module.SessionLocal = original_main_session_local
+    demo_seed_module.SessionLocal = original_demo_seed_session_local
     llm_service.anthropic_api_key = original_anthropic_api_key
     llm_service.openai_api_key = original_openai_api_key
     Base.metadata.drop_all(bind=engine)

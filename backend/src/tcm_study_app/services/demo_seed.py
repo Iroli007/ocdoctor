@@ -8,6 +8,11 @@ from tcm_study_app.services.card_generator import CardGenerator
 from tcm_study_app.services.document_library import DocumentLibrary
 
 DEMO_USER_ID = 1
+
+FIXED_USERS = [
+    {"id": 1, "name": "从清晨到向晚", "email": "dawn@ocdoctor.local"},
+    {"id": 2, "name": "刘正", "email": "liuzheng@ocdoctor.local"},
+]
 LEGACY_DEMO_TITLES = {
     "方剂学·速测样例",
     "针灸学·穴位样例",
@@ -79,15 +84,41 @@ DEMO_COLLECTIONS = [
 
 
 def seed_demo_content_if_needed() -> int:
-    """Seed or sync demo content if enabled."""
+    """Ensure fixed users exist and seed demo content when enabled."""
     if not settings.seed_demo_content:
-        return 0
+        db: Session = SessionLocal()
+        try:
+            ensure_fixed_users(db)
+            db.commit()
+            return 0
+        finally:
+            db.close()
 
     db: Session = SessionLocal()
     try:
         return seed_demo_content(db)
     finally:
         db.close()
+
+
+def ensure_fixed_users(db: Session) -> None:
+    """Create or sync the two fixed local users."""
+    for user_data in FIXED_USERS:
+        existing = db.get(User, user_data["id"])
+        if not existing:
+            db.add(
+                User(
+                    id=user_data["id"],
+                    name=user_data["name"],
+                    email=user_data["email"],
+                )
+            )
+            continue
+
+        existing.name = user_data["name"]
+        existing.email = user_data["email"]
+
+    db.flush()
 
 
 def seed_demo_content(db: Session) -> int:
@@ -97,24 +128,15 @@ def seed_demo_content(db: Session) -> int:
     documents, the seed is skipped entirely to avoid duplicate content
     caused by concurrent Vercel cold starts.
     """
-    user = db.get(User, DEMO_USER_ID)
-    if not user:
-        user = User(
-            id=DEMO_USER_ID,
-            email="demo@example.com",
-            name="Demo User",
-        )
-        db.add(user)
-        db.flush()
-
-    _remove_legacy_demo_collections(db, user.id)
+    ensure_fixed_users(db)
+    _remove_legacy_demo_collections(db, DEMO_USER_ID)
 
     created_collections = 0
     library = DocumentLibrary(db)
     generator = CardGenerator(db)
 
     for collection_data in DEMO_COLLECTIONS:
-        collection, created = _get_or_create_demo_collection(db, user.id, collection_data)
+        collection, created = _get_or_create_demo_collection(db, DEMO_USER_ID, collection_data)
         if created:
             created_collections += 1
 

@@ -186,9 +186,9 @@ def test_template_generation_returns_cards_with_citations(client):
     assert payload["cards"][0]["source_document_name"] == "手动粘贴文本"
 
 
-def test_card_draw_count_persists(client):
-    """Random draws should persist a per-card count in the backend payload."""
-    collection = _create_collection(client, "温病学·抽卡次数", "温病学")
+def test_card_importance_persists(client):
+    """Card importance should persist independently for each user."""
+    collection = _create_collection(client, "温病学·卡片重要度", "温病学")
     document_id = _import_text(
         client,
         collection["id"],
@@ -212,17 +212,41 @@ def test_card_draw_count_persists(client):
     assert generate_response.status_code == 200
     card_id = generate_response.json()["cards"][0]["id"]
 
-    first_draw = client.post(f"/api/cards/{card_id}/draw")
-    assert first_draw.status_code == 200
-    assert first_draw.json()["draw_count"] == 1
+    first_update = client.post(
+        f"/api/cards/{card_id}/importance?user_id=1",
+        json={"importance_level": 4},
+    )
+    assert first_update.status_code == 200
+    assert first_update.json()["importance_level"] == 4
 
-    second_draw = client.post(f"/api/cards/{card_id}/draw")
-    assert second_draw.status_code == 200
-    assert second_draw.json()["draw_count"] == 2
+    second_user_view = client.get(f"/api/cards/{card_id}?user_id=2")
+    assert second_user_view.status_code == 200
+    assert second_user_view.json()["importance_level"] == 0
 
-    cards_response = client.get(f"/api/cards?collection_id={collection['id']}")
-    assert cards_response.status_code == 200
-    assert cards_response.json()[0]["draw_count"] == 2
+    second_update = client.post(
+        f"/api/cards/{card_id}/importance?user_id=2",
+        json={"importance_level": 2},
+    )
+    assert second_update.status_code == 200
+    assert second_update.json()["importance_level"] == 2
+
+    user_one_cards = client.get(f"/api/cards?collection_id={collection['id']}&user_id=1")
+    assert user_one_cards.status_code == 200
+    assert user_one_cards.json()[0]["importance_level"] == 4
+
+    user_two_cards = client.get(f"/api/cards?collection_id={collection['id']}&user_id=2")
+    assert user_two_cards.status_code == 200
+    assert user_two_cards.json()[0]["importance_level"] == 2
+
+
+def test_users_endpoint_returns_fixed_accounts(client):
+    """The frontend should be able to load the two fixed accounts."""
+    response = client.get("/api/users")
+    assert response.status_code == 200
+    assert response.json() == [
+        {"id": 1, "name": "从清晨到向晚"},
+        {"id": 2, "name": "刘正"},
+    ]
 
 
 def test_ocr_textbook_chunk_can_generate_acupuncture_cards(client):
@@ -264,12 +288,51 @@ def test_ocr_textbook_chunk_can_generate_acupuncture_cards(client):
 
     assert response.status_code == 200
     payload = response.json()
-    assert payload["cards"]
-    first_card = payload["cards"][0]
-    assert first_card["normalized_content"]["acupoint_name"] in {"商阳", "合谷"}
-    assert first_card["normalized_content"]["meridian"] == "手阳明大肠经"
-    assert first_card["normalized_content"]["location"]
-    assert first_card["normalized_content"]["indication"]
+    assert len(payload["cards"]) >= 2
+
+    cards_by_name = {
+        card["normalized_content"]["acupoint_name"]: card["normalized_content"]
+        for card in payload["cards"]
+    }
+    assert cards_by_name["商阳"]["meridian"] == "手阳明大肠经"
+    assert cards_by_name["商阳"]["location"] == "在手指，食指末节桡侧，指甲根角侧上方0.1寸"
+    assert cards_by_name["商阳"]["indication"] == "齿痛、咽喉肿痛、热病、昏迷"
+    assert cards_by_name["商阳"]["technique"] == "浅刺0.1寸，或点刺出血"
+    assert "合谷" not in cards_by_name["商阳"]["location"]
+
+    assert cards_by_name["合谷"]["location"] == "在手背，第2掌骨桡侧的中点处"
+    assert cards_by_name["合谷"]["indication"] == "头痛、目赤肿痛、齿痛、鼻衄"
+    assert cards_by_name["合谷"]["technique"] == "直刺0.5～1寸，孕妇不宜针"
+
+
+def test_acupuncture_field_cleanup_removes_figure_and_song_noise(client):
+    """Technique fields should stop before figure captions or textbook songs."""
+    collection = _create_collection(client, "针灸学·字段清洗", "针灸学")
+    document_id = _import_text(
+        client,
+        collection["id"],
+        """
+11.少商*(Shaoshang, LU11)井穴
+【定位】在手指，拇指末节桡侧，指甲根角侧上方0.1寸（指寸）（图3-4)。
+【主治】①咽喉肿痛、鼻衄、高热等肺系实热病证；②昏迷、癫狂等急症。
+【操作】浅刺0.1寸，或点刺出血。图3-4 手太阴肺经经穴歌 LU十一是肺经，起于中府少商停。第二节 手阳明大肠经及其腧穴
+        """.strip(),
+    )
+
+    response = client.post(
+        "/api/cards/generate",
+        json={
+            "document_id": document_id,
+            "template_key": "acupoint_foundation",
+        },
+    )
+
+    assert response.status_code == 200
+    card = response.json()["cards"][0]["normalized_content"]
+    assert card["acupoint_name"] == "少商"
+    assert card["location"] == "在手指，拇指末节桡侧，指甲根角侧上方0.1寸（指寸）（图3-4)"
+    assert card["indication"] == "①咽喉肿痛、鼻衄、高热等肺系实热病证；②昏迷、癫狂等急症"
+    assert card["technique"] == "浅刺0.1寸，或点刺出血"
 
 
 def test_templates_endpoint_and_export_flow(client):
@@ -307,6 +370,39 @@ def test_templates_endpoint_and_export_flow(client):
     assert export_payload["filename"].endswith(".md")
     assert "卫分证" in export_payload["content"]
     assert "引用" in export_payload["content"]
+
+
+def test_clinical_acupuncture_template_generates_disease_cards(client):
+    """Clinical acupuncture textbooks should generate disease-treatment cards."""
+    collection = _create_collection(client, "针灸学·临床治疗卡", "针灸学")
+    document_id = _import_text(
+        client,
+        collection["id"],
+        """
+第十章 疼症
+颈椎病
+治法：疏经通络，调和气血。
+处方：风池、颈夹脊、肩井、合谷。
+加减：上肢麻木者加曲池、外关。
+        """.strip(),
+    )
+
+    response = client.post(
+        "/api/cards/generate",
+        json={
+            "document_id": document_id,
+            "template_key": "clinical_treatment",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    card = payload["cards"][0]
+    assert card["title"] == "颈椎病"
+    assert card["normalized_content"]["disease_name"] == "颈椎病"
+    assert card["normalized_content"]["treatment_principle"] == "疏经通络，调和气血"
+    assert card["normalized_content"]["acupoint_prescription"] == "风池、颈夹脊、肩井、合谷"
+    assert card["normalized_content"]["notes"] == "上肢麻木者加曲池、外关"
 
 
 def test_missing_collection_returns_http_friendly_404(client):

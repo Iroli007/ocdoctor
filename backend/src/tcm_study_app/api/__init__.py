@@ -6,6 +6,7 @@ from tcm_study_app.api.routes_health import router as health_router
 from tcm_study_app.api.routes_import import router as import_router
 from tcm_study_app.api.routes_subjects import router as subjects_router
 from tcm_study_app.api.routes_templates import router as templates_router
+from tcm_study_app.api.routes_users import router as users_router
 
 __all__ = [
     "health_router",
@@ -15,4 +16,5 @@ __all__ = [
     "cards_router",
     "subjects_router",
     "templates_router",
+    "users_router",
 ]

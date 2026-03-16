@@ -15,9 +15,11 @@ from tcm_study_app.api import (
     import_router,
     subjects_router,
     templates_router,
+    users_router,
 )
+from tcm_study_app.api.routes_cards import migrate_importance_from_json_if_needed
 from tcm_study_app.config import settings
-from tcm_study_app.db import init_db
+from tcm_study_app.db import SessionLocal, init_db
 from tcm_study_app.services import seed_demo_content_if_needed
 
 FRONTEND_DIR = Path(__file__).resolve().parents[3] / "frontend"
@@ -29,6 +31,11 @@ async def lifespan(app: FastAPI):
     # Startup
     init_db()
     seeded_count = seed_demo_content_if_needed()
+    db = SessionLocal()
+    try:
+        migrate_importance_from_json_if_needed(db)
+    finally:
+        db.close()
     print("Database initialized")
     if seeded_count:
         print(f"Seeded {seeded_count} demo collections")
@@ -61,6 +68,7 @@ app.include_router(collections_router)
 app.include_router(import_router)
 app.include_router(documents_router)
 app.include_router(cards_router)
+app.include_router(users_router)
 
 app.mount("/assets", StaticFiles(directory=FRONTEND_DIR / "assets"), name="assets")
 
