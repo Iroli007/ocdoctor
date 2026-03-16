@@ -388,6 +388,94 @@ def test_ocr_textbook_chunk_can_generate_acupuncture_cards(client):
     assert cards_by_name["合谷"]["technique"] == "直刺0.5～1寸，孕妇不宜针"
 
 
+def test_ocr_acupoint_table_chunk_can_generate_missing_lung_points(client):
+    """Table-style OCR pages should still yield acupoint cards for named rows."""
+    collection = _create_collection(client, "针灸学·表格页肺经", "针灸学")
+    import_response = client.post(
+        "/api/import/ocr-pages",
+        json={
+            "collection_id": collection["id"],
+            "file_name": "表3-3_手太阴肺经腧穴.pdf",
+            "pages": [
+                {
+                    "page_number": 1,
+                    "text": (
+                        "表3-3 手太阴肺经腧穴 序号 穴名 穴性 定位 主治 刺灸 备注 "
+                        "4 侠白 上臂内侧，肱二头肌桡侧缘处 干呕，肺系病证，上臂痛 直刺0.5～1寸 "
+                        "5 尺泽 合穴 肘横纹上，肱二头肌腱桡侧缘凹陷中 肺系实热；急性吐泻，中暑，小儿惊风等急症 直刺0.8～1.2寸 急证热证时可用刺血疗法 "
+                        "9 太渊 输穴 原穴 八会穴之脉会 掌侧腕横纹桡侧，桡动脉的桡侧凹陷处 无脉症 直刺0.3～0.5寸 针刺时避开桡动脉 "
+                        "10 鱼际 荥穴 手掌桡侧，当第1掌骨桡侧中点赤白肉际处 肺系热性病证；掌中热，小儿疳积 直刺0.5～0.8寸"
+                    ),
+                }
+            ],
+        },
+    )
+    assert import_response.status_code == 200
+
+    response = client.post(
+        "/api/cards/generate",
+        json={
+            "document_id": import_response.json()["document_id"],
+            "template_key": "acupoint_foundation",
+        },
+    )
+
+    assert response.status_code == 200
+    cards_by_name = {
+        card["normalized_content"]["acupoint_name"]: card["normalized_content"]
+        for card in response.json()["cards"]
+    }
+    assert {"侠白", "尺泽", "太渊", "鱼际"} <= set(cards_by_name)
+    assert cards_by_name["尺泽"]["location"] == "肘横纹上，肱二头肌腱桡侧缘凹陷中"
+    assert "中暑" in cards_by_name["尺泽"]["indication"]
+    assert cards_by_name["太渊"]["technique"] == "直刺0.3～0.5寸"
+    assert cards_by_name["太渊"]["caution"] == "针刺时避开桡动脉"
+
+
+def test_ocr_acupoint_table_chunk_can_generate_missing_triple_burner_points(client):
+    """Acupoint tables should recover row-based points on later continuation pages."""
+    collection = _create_collection(client, "针灸学·表格页三焦经", "针灸学")
+    import_response = client.post(
+        "/api/import/ocr-pages",
+        json={
+            "collection_id": collection["id"],
+            "file_name": "表3-10_手少阳三焦经腧穴.pdf",
+            "pages": [
+                {
+                    "page_number": 1,
+                    "text": (
+                        "表3-10 手少阳三焦经腧穴 序号 穴名 穴性 定位 主治 刺灸 备注 "
+                        "1 关冲 井穴 无名指尺侧，指甲角旁0.1寸 急救，中暑，昏厥 浅刺0.1寸 可点刺出血 "
+                        "5 外关 络穴 八脉交会穴 通阳维脉 前臂背侧，当阳池与肘尖的连线上，腕背横纹上2寸，尺骨与桡骨之间 热病，偏头痛，瘰疬，胸胁痛 直刺0.5～1寸 "
+                        "16 天牖 在颈部，横平下颌角，胸锁乳突肌的后缘凹陷中 头痛，目眩，瘿气，项强，肩背痛 直刺0.5～1寸 "
+                        "23 丝竹空 在面部，眉梢凹陷中 目赤肿痛，眼睑瞤动，齿痛，癫狂痫 平刺0.5～1寸"
+                    ),
+                }
+            ],
+        },
+    )
+    assert import_response.status_code == 200
+
+    response = client.post(
+        "/api/cards/generate",
+        json={
+            "document_id": import_response.json()["document_id"],
+            "template_key": "acupoint_review",
+        },
+    )
+
+    assert response.status_code == 200
+    cards_by_name = {
+        card["normalized_content"]["acupoint_name"]: card["normalized_content"]
+        for card in response.json()["cards"]
+    }
+    assert {"关冲", "外关", "天牖", "丝竹空"} <= set(cards_by_name)
+    assert cards_by_name["关冲"]["meridian"] == "手少阳三焦经"
+    assert cards_by_name["外关"]["location"].startswith("前臂背侧")
+    assert "偏头痛" in cards_by_name["外关"]["indication"]
+    assert cards_by_name["丝竹空"]["location"] == "在面部，眉梢凹陷中"
+
+
 def test_acupuncture_field_cleanup_removes_figure_and_song_noise(client):
     """Technique fields should stop before figure captions or textbook songs."""
     collection = _create_collection(client, "针灸学·字段清洗", "针灸学")

@@ -388,6 +388,10 @@ class CardGenerator:
 
     def _split_acupuncture_chunk(self, content: str) -> list[str]:
         """Split OCR textbook prose into one-text-block-per-acupoint."""
+        table_blocks = self._split_acupuncture_table_chunk(content)
+        if table_blocks:
+            return table_blocks
+
         compact_content = re.sub(r"\s+", " ", content).strip()
         starts = list(
             re.finditer(
@@ -408,6 +412,203 @@ class CardGenerator:
             if block:
                 blocks.append(block)
         return blocks
+
+    def _split_acupuncture_table_chunk(self, content: str) -> list[str]:
+        """Split OCR table pages into one synthetic labeled block per acupoint row."""
+        compact = re.sub(r"\s+", " ", content).strip()
+        if not compact:
+            return []
+
+        if not self._looks_like_acupuncture_table(compact):
+            return []
+
+        row_starts = list(
+            re.finditer(
+                r"(?<!\d)(?P<index>[1-9]|1\d|2\d|3\d|4\d|5\d)\s+(?P<name>[\u4e00-\u9fa5]{2,5})(?=\s)",
+                compact,
+            )
+        )
+        if len(row_starts) < 2:
+            return []
+
+        meridian = self._extract_meridian_from_text(compact)
+        blocks: list[str] = []
+
+        for index, match in enumerate(row_starts):
+            start_index = match.start()
+            end_index = row_starts[index + 1].start() if index + 1 < len(row_starts) else len(compact)
+            row_text = compact[start_index:end_index].strip(" ；;。")
+            row_name = match.group("name")
+            if (
+                not row_text
+                or len(row_text) < 10
+                or not self._looks_like_acupuncture_row_name(row_name)
+            ):
+                continue
+
+            block = self._build_acupuncture_table_row_block(
+                row_name=row_name,
+                row_text=row_text,
+                meridian=meridian,
+            )
+            if block:
+                blocks.append(block)
+
+        return blocks
+
+    def _looks_like_acupuncture_table(self, text: str) -> bool:
+        """Only treat true acupoint tables as acupoint-row sources."""
+        if any(marker in text for marker in ("病名", "证型", "治法", "处方", "方药", "病例", "病机")):
+            return False
+
+        has_acupoint_markers = any(
+            marker in text
+            for marker in ("穴名", "腧穴", "俞穴", "经穴", "序号", "刺灸", "定位", "主治")
+        )
+        has_meridian_context = bool(self._extract_meridian_from_text(text))
+        row_count = len(
+            list(
+                re.finditer(
+                    r"(?<!\d)(?:[1-9]|1\d|2\d|3\d|4\d|5\d)\s+[\u4e00-\u9fa5]{2,5}\s+",
+                    text,
+                )
+            )
+        )
+        return (has_acupoint_markers or has_meridian_context) and row_count >= 3
+
+    def _looks_like_acupuncture_row_name(self, name: str) -> bool:
+        """Guard against non-acupoint row titles in mixed tables."""
+        cleaned = re.sub(r"\s+", "", name)
+        if not 2 <= len(cleaned) <= 5:
+            return False
+        if any(token in cleaned for token in ("主治", "定位", "刺灸", "注意", "病", "症", "表", "图")):
+            return False
+        return True
+
+    def _build_acupuncture_table_row_block(
+        self,
+        *,
+        row_name: str,
+        row_text: str,
+        meridian: str | None,
+    ) -> str | None:
+        """Convert one OCR table row into a labeled pseudo-paragraph for extraction."""
+        body = re.sub(
+            rf"^(?:[1-9]|1\d|2\d|3\d|4\d|5\d)\s+{re.escape(row_name)}\s*",
+            "",
+            row_text,
+        ).strip()
+        body = re.sub(
+            r"\s+",
+            " ",
+            body,
+        ).strip()
+        body = self._strip_acupoint_property_prefix(body)
+        body = re.sub(r"\s+", " ", body).strip(" ；;。")
+        if not body:
+            return None
+
+        technique_matches = list(
+            re.finditer(
+                r"(?:向外斜刺或平刺|向上平（斜）刺|向上平刺|向后内斜刺|微张口，直刺|"
+                r"避开(?:桡动脉|动脉)，(?:直刺|平刺)|浅刺|直刺|斜刺|平刺|横刺|点刺|"
+                r"不针不灸|可灸|可用灸法|艾炷灸|温针灸)[^。；;]{0,40}?(?:寸|壮|出血|疗法|不针不灸)",
+                body,
+            )
+        )
+        technique = None
+        caution = None
+        pre_technique = body
+        if technique_matches:
+            last_match = technique_matches[-1]
+            pre_technique = body[: last_match.start()].strip(" ；;。")
+            tail = body[last_match.start() :].strip(" ；;。")
+            caution_match = re.search(
+                r"(孕妇[^。；;]*|针刺[^。；;]*避开[^。；;]*|不可深刺[^。；;]*|慎用[^。；;]*)$",
+                tail,
+            )
+            if caution_match:
+                caution = caution_match.group(1).strip(" ；;。")
+                tail = tail[: caution_match.start()].strip(" ；;。")
+            technique = tail or None
+
+        location, indication = self._split_table_row_location_and_indication(pre_technique)
+
+        parts = [row_name]
+        if meridian:
+            parts.append(f"【经络】{meridian}")
+        if location:
+            parts.append(f"【定位】{location}")
+        if indication:
+            parts.append(f"【主治】{indication}")
+        if technique:
+            parts.append(f"【操作】{technique}")
+        if caution:
+            parts.append(f"【注意】{caution}")
+
+        if len(parts) <= 1:
+            return None
+        return " ".join(parts)
+
+    def _split_table_row_location_and_indication(self, text: str) -> tuple[str | None, str | None]:
+        """Best-effort split of a table row into location and indication fields."""
+        normalized = re.sub(r"\s+", " ", text).strip(" ；;。")
+        if not normalized:
+            return None, None
+
+        disease_marker = re.search(
+            r"(肺系|胸肺|头面|五官|咳|喘|痛|热病|热证|耳鸣|耳聋|咽喉|齿痛|目赤|目眩|头痛|胸痛|胁肋痛|"
+            r"便秘|泄泻|呕吐|呃逆|失眠|心悸|癫|狂|痫|昏迷|惊风|瘰疬|瘿气|疝气|"
+            r"月经|带下|遗精|小便|水肿|无脉症|乳痈|乳少|口眼|面瘫|暴喑|喉痹|鼻衄|"
+            r"干呕|反胃|痔疾|痢疾|丹毒|脚气|中暑|消渴|肩背痛|腕痛|上臂痛|项强)",
+            normalized,
+        )
+        if disease_marker and disease_marker.start() >= 6:
+            location = normalized[: disease_marker.start()].strip(" ；;。,:：，,")
+            indication = normalized[disease_marker.start() :].strip(" ；;。,:：，,")
+        else:
+            location = normalized if self._looks_like_location_text(normalized) else None
+            indication = None if location else normalized
+
+        return location or None, indication or None
+
+    def _strip_acupoint_property_prefix(self, text: str) -> str:
+        """Strip repeated acupoint-property labels before location text begins."""
+        property_pattern = re.compile(
+            r"^(?:"
+            r"井穴|荥穴|荣穴|输穴|俞穴|原穴|经穴|合穴|络穴|郄穴|募穴|下合穴|交会穴|"
+            r"八会穴(?:之脉会)?|八脉交会穴|肺之募穴|胃之下合穴|大肠之下合穴|小肠之下合穴|"
+            r"脾之大络|足三阴经交会穴|通于[\u4e00-\u9fa5]+|通[\u4e00-\u9fa5]{1,4}脉|原穴之脉会"
+            r")(?:[；;、，,\s]+|$)"
+        )
+        cleaned = text.strip()
+        while True:
+            updated = property_pattern.sub("", cleaned).strip()
+            if updated == cleaned:
+                break
+            cleaned = updated
+        return cleaned
+
+    def _looks_like_location_text(self, text: str) -> bool:
+        """Return whether the fragment looks more like a location than an indication."""
+        return bool(
+            re.search(
+                r"(在|当|于|上肢|前臂|腕|掌|手|足|头部|面部|胸部|腹部|背部|肩|颈|"
+                r"耳后|耳区|眉梢|乳突|肘|膝|踝|趾|指|横纹|凹陷|肌|骨|肉际|关节|"
+                r"旁开|上方|下方|中央|中点|后缘|前缘|交点处|之间|处)",
+                text,
+            )
+        )
+
+    def _extract_meridian_from_text(self, text: str) -> str | None:
+        """Infer the meridian name from a nearby heading when present."""
+        match = re.search(
+            r"(手太阴肺经|手阳明大肠经|足阳明胃经|足太阴脾经|手少阴心经|手太阳小肠经|"
+            r"足太阳膀胱经|足少阴肾经|手厥阴心包经|手少阳三焦经|足少阳胆经|足厥阴肝经|"
+            r"督脉|任脉)",
+            text,
+        )
+        return match.group(1) if match else None
 
     def _filter_template_fields(self, extracted: dict, template) -> dict:
         """Filter the extracted subject payload down to the template fields."""
