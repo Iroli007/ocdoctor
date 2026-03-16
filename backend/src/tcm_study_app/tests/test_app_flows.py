@@ -242,6 +242,43 @@ def test_card_importance_persists(client):
     assert user_two_cards.json()[0]["importance_level"] == 2
 
 
+def test_random_card_batch_endpoint_respects_exclusions(client):
+    """Buffered draw endpoint should return unique cards and skip excluded ones."""
+    collection = _create_collection(client, "针灸学·随机卡池", "针灸学")
+    document_id = _import_text(
+        client,
+        collection["id"],
+        """
+合谷穴
+经络：手阳明大肠经
+定位：手背第一、二掌骨间，当第二掌骨桡侧中点处
+主治：头痛、牙痛、面口病证
+刺灸法：直刺0.5-1寸
+
+足三里
+经络：足阳明胃经
+定位：犊鼻下3寸，距胫骨前缘一横指
+主治：胃痛、呕吐、腹胀、虚劳诸证
+刺灸法：直刺1-2寸
+        """.strip(),
+    )
+    generate_response = client.post(
+        "/api/cards/generate",
+        json={"document_id": document_id, "template_key": "acupoint_foundation"},
+    )
+    assert generate_response.status_code == 200
+    generated_cards = generate_response.json()["cards"]
+    excluded_id = generated_cards[0]["id"]
+
+    batch_response = client.get(
+        f"/api/cards/random-batch?collection_id={collection['id']}&user_id=1&template_key=acupoint_foundation&limit=2&exclude_card_ids={excluded_id}"
+    )
+    assert batch_response.status_code == 200
+    payload = batch_response.json()
+    assert len(payload) == 1
+    assert payload[0]["id"] != excluded_id
+
+
 def test_users_endpoint_returns_fixed_accounts(client):
     """The frontend should be able to load the two fixed accounts."""
     response = client.get("/api/users")

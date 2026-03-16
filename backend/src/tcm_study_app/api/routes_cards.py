@@ -2,6 +2,7 @@
 import json
 import logging
 from pathlib import Path
+import re
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
@@ -21,6 +22,7 @@ from tcm_study_app.schemas import (
     WarmDiseaseCardData,
 )
 from tcm_study_app.services import create_card_generator
+from tcm_study_app.services.card_pool import select_weighted_card_batch
 from tcm_study_app.services.clinical_card_cleanup import (
     clean_clinical_card_payload,
     is_valid_clinical_card_payload,
@@ -214,6 +216,70 @@ def _serialize_card_list(
     return results
 
 
+def _normalize_card_key(value: str | None) -> str:
+    """Normalize a card title-like key for cross-source dedupe."""
+    if not value:
+        return ""
+    normalized = "".join(str(value).split())
+    normalized = re.sub(r"[（(].*?[）)]", "", normalized)
+    normalized = "".join(
+        char for char in normalized if char.isalnum() or "\u4e00" <= char <= "\u9fa5"
+    )
+    return normalized.lower()
+
+
+def _card_dedupe_key(card: KnowledgeCardResponse) -> str:
+    """Build a stable cross-document dedupe key."""
+    normalized_content = card.normalized_content or {}
+    canonical_name = (
+        normalized_content.get("acupoint_name")
+        or normalized_content.get("disease_name")
+        or normalized_content.get("pattern_name")
+        or card.title
+    )
+    key = _normalize_card_key(canonical_name)
+    return f"{card.template_key}:{key or card.id}"
+
+
+def _card_quality_score(card: KnowledgeCardResponse) -> int:
+    """Prefer richer cards when duplicates are encountered."""
+    normalized_content = card.normalized_content or {}
+    field_count = sum(
+        1
+        for key, value in normalized_content.items()
+        if value and key not in {"template_key", "template_label"}
+    )
+    citation_count = len(card.citations)
+    return field_count * 10 + citation_count
+
+
+def _dedupe_response_cards(cards: list[KnowledgeCardResponse]) -> list[KnowledgeCardResponse]:
+    """Dedupe cards using the same canonical title rules as the frontend."""
+    deduped: dict[str, KnowledgeCardResponse] = {}
+    for card in cards:
+        key = _card_dedupe_key(card)
+        current = deduped.get(key)
+        if current is None or _card_quality_score(card) >= _card_quality_score(current):
+            deduped[key] = card
+    return sorted(deduped.values(), key=lambda item: item.id, reverse=True)
+
+
+def _load_serialized_cards(
+    db: Session,
+    *,
+    collection_ids: list[int],
+    user_id: int,
+    template_key: str | None,
+) -> list[KnowledgeCardResponse]:
+    """Load, clean, and dedupe cards across one or more collections."""
+    query = db.query(KnowledgeCard).filter(KnowledgeCard.collection_id.in_(collection_ids))
+    if template_key:
+        query = query.filter(KnowledgeCard.category == template_key)
+    query = query.order_by(KnowledgeCard.created_at.desc())
+    serialized = _serialize_card_list(query.all(), db, user_id)
+    return _dedupe_response_cards(serialized)
+
+
 def migrate_importance_from_json_if_needed(db: Session) -> None:
     """One-time migration: copy importance_level from card JSON to user_card_importance for user 1."""
     global _IMPORTANCE_MIGRATED  # noqa: PLW0603
@@ -322,21 +388,54 @@ async def get_cards(
     collection = db.get(StudyCollection, collection_id)
     if not collection:
         raise HTTPException(status_code=404, detail=f"Collection {collection_id} not found")
+    cards = _load_serialized_cards(
+        db,
+        collection_ids=[collection_id],
+        user_id=user_id,
+        template_key=template_key,
+    )
+    return cards[offset:] if limit is None else cards[offset : offset + limit]
 
-    query = db.query(KnowledgeCard).filter(KnowledgeCard.collection_id == collection_id)
-    if template_key:
-        query = query.filter(KnowledgeCard.category == template_key)
-    query = query.order_by(KnowledgeCard.created_at.desc())
-    if template_key == "clinical_treatment":
-        cards = query.all()
-        cleaned_cards = _serialize_card_list(cards, db, user_id)
-        return cleaned_cards[offset:] if limit is None else cleaned_cards[offset : offset + limit]
 
-    query = query.offset(offset)
-    if limit is not None:
-        query = query.limit(limit)
-    cards = query.all()
-    return _serialize_card_list(cards, db, user_id)
+@router.get("/random-batch", response_model=list[KnowledgeCardResponse])
+async def get_random_card_batch(
+    collection_id: int | None = Query(None, description="Single collection ID"),
+    collection_ids: list[int] = Query([], description="Merged collection IDs"),
+    user_id: int = Query(1, description="User ID"),
+    template_key: str = Query(..., description="Template key"),
+    limit: int = Query(10, ge=1, le=30, description="Target batch size"),
+    exclude_card_ids: list[int] = Query([], description="Card IDs to avoid"),
+    db: Session = Depends(get_db),
+):
+    """Return a weighted random batch for the front-end draw buffer."""
+    _ensure_user(db, user_id)
+    migrate_importance_from_json_if_needed(db)
+
+    target_collection_ids = collection_ids or ([collection_id] if collection_id is not None else [])
+    if not target_collection_ids:
+        raise HTTPException(status_code=400, detail="collection_id or collection_ids is required")
+
+    existing_collections = (
+        db.query(StudyCollection.id)
+        .filter(StudyCollection.id.in_(target_collection_ids))
+        .all()
+    )
+    existing_ids = {item[0] for item in existing_collections}
+    missing_ids = [item for item in target_collection_ids if item not in existing_ids]
+    if missing_ids:
+        raise HTTPException(status_code=404, detail=f"Collection {missing_ids[0]} not found")
+
+    cards = _load_serialized_cards(
+        db,
+        collection_ids=target_collection_ids,
+        user_id=user_id,
+        template_key=template_key,
+    )
+    return select_weighted_card_batch(
+        cards,
+        limit=limit,
+        exclude_card_ids=set(exclude_card_ids),
+    )
 
 
 @router.get("/{card_id}", response_model=KnowledgeCardResponse)

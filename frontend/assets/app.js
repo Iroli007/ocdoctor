@@ -3,9 +3,9 @@ const state = {
   documents: [],
   cards: [],
   cardsByTemplate: {},
-  templateOffsets: {},
-  templateHasMore: {},
-  drawnCardIdsByTemplate: {},
+  cardPoolsByTemplate: {},
+  poolFetchPromisesByTemplate: {},
+  poolPollTimerId: null,
   templates: [],
   activeCollectionId: null,
   activeDocumentId: null,
@@ -15,8 +15,9 @@ const state = {
   users: [],
 };
 
-const CARD_BATCH_SIZE = 12;
-const PREFETCH_THRESHOLD = 6;
+const CARD_POOL_SIZE = 10;
+const CARD_POOL_LOW_WATER = 3;
+const CARD_POOL_POLL_MS = 30_000;
 
 function normalizeTitleKey(value) {
   return String(value || "")
@@ -189,6 +190,53 @@ function setButtonBusy(button, isBusy, busyLabel) {
   button.textContent = isBusy ? busyLabel : button.dataset.defaultLabel;
 }
 
+function setPoolStatus(message, isBusy = false) {
+  const element = document.getElementById("pool-status");
+  if (!element) {
+    return;
+  }
+  element.textContent = message;
+  element.classList.toggle("is-busy", Boolean(isBusy));
+}
+
+function getTemplatePool(templateKey = state.activeTemplateKey) {
+  return state.cardPoolsByTemplate[templateKey] || [];
+}
+
+function mergeTemplateCards(templateKey, cards) {
+  const merged = dedupeCards([...(state.cardsByTemplate[templateKey] || []), ...cards]);
+  state.cardsByTemplate[templateKey] = merged;
+  if (templateKey === state.activeTemplateKey) {
+    state.cards = merged;
+  }
+  return merged;
+}
+
+function mergePoolCards(cards) {
+  const deduped = new Map();
+  for (const card of cards) {
+    const key = getCardDedupeKey(card);
+    if (!deduped.has(key)) {
+      deduped.set(key, card);
+    }
+  }
+  return Array.from(deduped.values());
+}
+
+function syncPoolStatus(templateKey = state.activeTemplateKey) {
+  if (!templateKey) {
+    setPoolStatus("卡池未准备");
+    return;
+  }
+  const poolSize = getTemplatePool(templateKey).length;
+  const isBusy = Boolean(state.poolFetchPromisesByTemplate[templateKey]);
+  if (isBusy) {
+    setPoolStatus("卡池补充中", true);
+    return;
+  }
+  setPoolStatus(`卡池已就绪 ${poolSize}/${CARD_POOL_SIZE}`);
+}
+
 function syncCollectionSelects() {
   const switcher = document.getElementById("collection-switcher");
   const current = String(state.activeCollectionId || "");
@@ -226,24 +274,6 @@ function findTemplateLabel(templateKey) {
   return state.templates.find((item) => item.key === templateKey)?.label || templateKey;
 }
 
-function pickRandomItem(items) {
-  if (!items.length) {
-    return null;
-  }
-  return items[Math.floor(Math.random() * items.length)];
-}
-
-function buildWeightedPool(cards) {
-  const weighted = [];
-  for (const card of cards) {
-    const weight = Math.max(1, 1 + Number(card.importance_level || 0));
-    for (let index = 0; index < weight; index += 1) {
-      weighted.push(card);
-    }
-  }
-  return weighted;
-}
-
 function renderImportanceStars(card) {
   const current = Number(card.importance_level || 0);
   return Array.from({ length: 5 }, (_, index) => {
@@ -264,13 +294,6 @@ function renderImportanceStars(card) {
 
 function getTemplateCards(templateKey = state.activeTemplateKey) {
   return state.cards.filter((card) => card.template_key === templateKey);
-}
-
-function getRandomDrawPool(templateKey = state.activeTemplateKey) {
-  const cards = getTemplateCards(templateKey);
-  const drawnIds = state.drawnCardIdsByTemplate[templateKey] || [];
-  const unseenCards = cards.filter((card) => !drawnIds.includes(card.id));
-  return buildWeightedPool(unseenCards.length ? unseenCards : cards);
 }
 
 function getDocumentTemplateScore(document, templateKey, subjectKey) {
@@ -400,15 +423,24 @@ function renderTemplates() {
       const userId = state.currentUserId || 1;
       if (!state.cardsByTemplate[state.activeTemplateKey]) {
         setStatus("正在切换模板...");
-        state.cards = await loadCardsForActiveCollection(userId, state.activeTemplateKey);
+        await fillCardPool(userId, state.activeTemplateKey, { force: true });
       } else {
-        state.cards = state.cardsByTemplate[state.activeTemplateKey];
+        void fillCardPool(userId, state.activeTemplateKey, { minSize: CARD_POOL_SIZE });
       }
-      const templateCards = getTemplateCards(state.activeTemplateKey);
-      state.activeCardId = templateCards[0]?.id || null;
+      state.cards = state.cardsByTemplate[state.activeTemplateKey] || [];
+      if (!state.cards.length) {
+        try {
+          await ensureCardsAvailableForTemplate(userId);
+        } catch (error) {
+          setStatus(`当前模板暂时没有可用卡片：${error.message}`);
+        }
+      }
+      const nextCard = getTemplatePool(state.activeTemplateKey)[0] || getTemplateCards(state.activeTemplateKey)[0];
+      state.activeCardId = nextCard?.id || null;
       syncBestDocumentSelection();
       renderTemplates();
       renderCards();
+      syncPoolStatus(state.activeTemplateKey);
       setStatus(`已切换到${findTemplateLabel(state.activeTemplateKey)}。`);
     });
   });
@@ -551,37 +583,95 @@ async function loadDocumentsForActiveCollection() {
 function resetTemplateCardCache() {
   state.cards = [];
   state.cardsByTemplate = {};
-  state.templateOffsets = {};
-  state.templateHasMore = {};
-  state.drawnCardIdsByTemplate = {};
+  state.cardPoolsByTemplate = {};
+  state.poolFetchPromisesByTemplate = {};
+  syncPoolStatus();
 }
 
-async function loadCardsForActiveCollection(
+function buildRandomBatchQuery({ userId, templateKey, limit, excludeCardIds = [] }) {
+  const active = getActiveCollection();
+  if (!active) {
+    return "";
+  }
+  const params = new URLSearchParams();
+  params.set("user_id", String(userId));
+  params.set("template_key", templateKey);
+  params.set("limit", String(limit));
+  active.member_collection_ids.forEach((collectionId) =>
+    params.append("collection_ids", String(collectionId)),
+  );
+  excludeCardIds.forEach((cardId) => params.append("exclude_card_ids", String(cardId)));
+  return `/api/cards/random-batch?${params.toString()}`;
+}
+
+async function fillCardPool(
   userId,
   templateKey = state.activeTemplateKey,
-  { append = false } = {},
+  { force = false, minSize = CARD_POOL_SIZE } = {},
 ) {
   const active = getActiveCollection();
   if (!active || !templateKey) {
     return [];
   }
 
-  const offset = append ? state.templateOffsets[templateKey] || 0 : 0;
-  const cards = await Promise.all(
-    active.member_collection_ids.map((collectionId) =>
-      api(
-        `/api/cards?collection_id=${collectionId}&user_id=${userId}&template_key=${encodeURIComponent(templateKey)}&limit=${CARD_BATCH_SIZE}&offset=${offset}`,
-      ),
-    ),
+  const existingPool = getTemplatePool(templateKey);
+  if (!force && existingPool.length >= minSize) {
+    syncPoolStatus(templateKey);
+    return existingPool;
+  }
+
+  if (state.poolFetchPromisesByTemplate[templateKey]) {
+    return state.poolFetchPromisesByTemplate[templateKey];
+  }
+
+  const needed = Math.max(1, minSize - existingPool.length);
+  const excludeCardIds = Array.from(
+    new Set([
+      ...existingPool.map((card) => card.id),
+      ...(state.activeCardId ? [state.activeCardId] : []),
+    ]),
   );
-  const fetchedCards = dedupeCards(cards.flat());
-  const mergedCards = append
-    ? dedupeCards([...(state.cardsByTemplate[templateKey] || []), ...fetchedCards])
-    : fetchedCards;
-  state.cardsByTemplate[templateKey] = mergedCards;
-  state.templateOffsets[templateKey] = offset + CARD_BATCH_SIZE;
-  state.templateHasMore[templateKey] = cards.some((batch) => batch.length === CARD_BATCH_SIZE);
-  return mergedCards;
+
+  const request = api(
+    buildRandomBatchQuery({
+      userId,
+      templateKey,
+      limit: needed,
+      excludeCardIds,
+    }),
+  )
+    .then((fetchedCards) => {
+      const mergedPool = mergePoolCards([...existingPool, ...fetchedCards]);
+      state.cardPoolsByTemplate[templateKey] = mergedPool;
+      mergeTemplateCards(templateKey, [...fetchedCards, ...mergedPool]);
+      syncPoolStatus(templateKey);
+      return mergedPool;
+    })
+    .catch((error) => {
+      syncPoolStatus(templateKey);
+      throw error;
+    })
+    .finally(() => {
+      delete state.poolFetchPromisesByTemplate[templateKey];
+      syncPoolStatus(templateKey);
+    });
+
+  state.poolFetchPromisesByTemplate[templateKey] = request;
+  syncPoolStatus(templateKey);
+  return request;
+}
+
+function startPoolPolling() {
+  if (state.poolPollTimerId) {
+    window.clearInterval(state.poolPollTimerId);
+  }
+  state.poolPollTimerId = window.setInterval(() => {
+    const userId = state.currentUserId || 1;
+    if (!state.activeTemplateKey) {
+      return;
+    }
+    void fillCardPool(userId, state.activeTemplateKey, { minSize: CARD_POOL_SIZE });
+  }, CARD_POOL_POLL_MS);
 }
 
 async function refreshWorkspace() {
@@ -608,20 +698,75 @@ async function refreshWorkspace() {
     state.activeTemplateKey = state.templates[0]?.key || null;
   }
   resetTemplateCardCache();
-  state.cards = await loadCardsForActiveCollection(userId, state.activeTemplateKey);
+  await fillCardPool(userId, state.activeTemplateKey, { force: true });
+  state.cards = state.cardsByTemplate[state.activeTemplateKey] || [];
   const activeTemplateCards = getTemplateCards();
-  if (
-    !state.cards.find((card) => card.id === state.activeCardId) ||
-    (activeTemplateCards.length &&
-      !activeTemplateCards.find((card) => card.id === state.activeCardId))
-  ) {
-    state.activeCardId = activeTemplateCards[0]?.id || state.cards[0]?.id || null;
-  }
+  const bufferedCard = getTemplatePool(state.activeTemplateKey)[0];
+  state.activeCardId = bufferedCard?.id || activeTemplateCards[0]?.id || null;
   syncBestDocumentSelection();
+  startPoolPolling();
 
   renderWorkspaceHeader();
   renderTemplates();
   renderCards();
+  syncPoolStatus();
+}
+
+async function ensureCardsAvailableForTemplate(userId) {
+  await fillCardPool(userId, state.activeTemplateKey, { minSize: 1 });
+  if (getTemplatePool(state.activeTemplateKey).length) {
+    return;
+  }
+
+  let activeDocument = getActiveDocument();
+  if (!activeDocument) {
+    activeDocument = pickBestDocumentForCurrentTemplate()?.document || null;
+  }
+  if (!activeDocument) {
+    throw new Error("当前集合里还没有可抽卡的后台文档");
+  }
+
+  if (state.activeDocumentId !== activeDocument.id) {
+    state.activeDocumentId = activeDocument.id;
+  }
+
+  let payload;
+  try {
+    payload = await api(`/api/cards/generate?user_id=${userId}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        document_id: activeDocument.id,
+        template_key: state.activeTemplateKey,
+      }),
+    });
+  } catch (error) {
+    const bestAlternative = pickBestDocumentForCurrentTemplate(activeDocument.id);
+    if (
+      error.message.includes("No cards could be generated") &&
+      bestAlternative &&
+      bestAlternative.score > 0
+    ) {
+      activeDocument = bestAlternative.document;
+      state.activeDocumentId = activeDocument.id;
+      payload = await api(`/api/cards/generate?user_id=${userId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          document_id: activeDocument.id,
+          template_key: state.activeTemplateKey,
+        }),
+      });
+    } else {
+      throw error;
+    }
+  }
+
+  mergeTemplateCards(state.activeTemplateKey, payload.cards || []);
+  await fillCardPool(userId, state.activeTemplateKey, {
+    force: true,
+    minSize: CARD_POOL_SIZE,
+  });
 }
 
 async function updateCardImportance(cardId, importanceLevel) {
@@ -631,12 +776,20 @@ async function updateCardImportance(cardId, importanceLevel) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ importance_level: importanceLevel }),
   });
-  state.cards = state.cards.map((card) => (card.id === updatedCard.id ? updatedCard : card));
-  if (state.activeTemplateKey) {
-    state.cardsByTemplate[state.activeTemplateKey] = state.cards;
+  for (const [templateKey, cards] of Object.entries(state.cardsByTemplate)) {
+    state.cardsByTemplate[templateKey] = cards.map((card) =>
+      card.id === updatedCard.id ? updatedCard : card,
+    );
   }
+  for (const [templateKey, pool] of Object.entries(state.cardPoolsByTemplate)) {
+    state.cardPoolsByTemplate[templateKey] = pool.map((card) =>
+      card.id === updatedCard.id ? updatedCard : card,
+    );
+  }
+  state.cards = state.cardsByTemplate[state.activeTemplateKey] || [];
   state.activeCardId = updatedCard.id;
   renderCards();
+  syncPoolStatus();
   setStatus(`已将「${updatedCard.title}」标记为 ${importanceLevel} 星重要程度。`);
   return updatedCard;
 }
@@ -672,92 +825,36 @@ async function drawRandomCard() {
 
   try {
     setButtonBusy(button, true, "抽卡中...");
-    const existingCards = getRandomDrawPool();
-    if (existingCards.length) {
-      setStatus("正在随机抽卡...");
-      const drawnCard = pickRandomItem(existingCards);
-      state.drawnCardIdsByTemplate[state.activeTemplateKey] = Array.from(
-        new Set([...(state.drawnCardIdsByTemplate[state.activeTemplateKey] || []), drawnCard.id]),
-      );
-      state.activeCardId = drawnCard.id;
-      renderCards();
-      if (
-        getRandomDrawPool().length <= PREFETCH_THRESHOLD &&
-        state.templateHasMore[state.activeTemplateKey]
-      ) {
-        void loadCardsForActiveCollection(userId, state.activeTemplateKey, { append: true }).then(
-          (cards) => {
-            state.cards = cards;
-          },
-        );
-      }
-      setStatus(`已随机抽到「${drawnCard.title}」。`);
+    let pool = getTemplatePool(state.activeTemplateKey);
+    if (!pool.length) {
+      setStatus("卡池补充中...");
+      setPoolStatus("卡池补充中", true);
+      await ensureCardsAvailableForTemplate(userId);
+      pool = getTemplatePool(state.activeTemplateKey);
+    }
+
+    const drawnCard = pool.shift() || null;
+    state.cardPoolsByTemplate[state.activeTemplateKey] = pool;
+    if (!drawnCard) {
+      setStatus("当前模板暂时没有可用卡片。");
+      syncPoolStatus();
       return;
     }
 
-    let activeDocument = getActiveDocument();
-    if (!activeDocument) {
-      activeDocument = pickBestDocumentForCurrentTemplate()?.document || null;
-    }
-    if (!activeDocument) {
-      setStatus("当前集合里还没有可抽卡的后台文档。");
-      return;
-    }
-    if (state.activeDocumentId !== activeDocument.id) {
-      state.activeDocumentId = activeDocument.id;
-    }
-
-    setStatus("正在整理内容并随机抽卡...");
-    let payload;
-    try {
-      payload = await api(`/api/cards/generate?user_id=${userId}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          document_id: activeDocument.id,
-          template_key: state.activeTemplateKey,
-        }),
-      });
-    } catch (error) {
-      const bestAlternative = pickBestDocumentForCurrentTemplate(activeDocument.id);
-      if (
-        error.message.includes("No cards could be generated") &&
-        bestAlternative &&
-        bestAlternative.score > 0
-      ) {
-        activeDocument = bestAlternative.document;
-        state.activeDocumentId = activeDocument.id;
-        setStatus(`当前文档不适合该模板，已自动改用《${activeDocument.file_name}》继续抽卡...`);
-        payload = await api(`/api/cards/generate?user_id=${userId}`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            document_id: activeDocument.id,
-            template_key: state.activeTemplateKey,
-          }),
-        });
-      } else {
-        throw error;
-      }
-    }
-    state.cards = await loadCardsForActiveCollection(userId, state.activeTemplateKey, {
-      append: true,
-    });
-    let drawnCard =
-      pickRandomItem(
-        payload.cards.filter((card) => card.template_key === state.activeTemplateKey),
-      ) ||
-      pickRandomItem(getRandomDrawPool()) ||
-      state.cards[0] ||
-      null;
-    state.activeCardId = drawnCard?.id || null;
-    renderWorkspaceHeader();
+    mergeTemplateCards(state.activeTemplateKey, [drawnCard]);
+    state.cards = state.cardsByTemplate[state.activeTemplateKey] || [];
+    state.activeCardId = drawnCard.id;
     renderCards();
-    setStatus(
-      drawnCard
-        ? `已从《${activeDocument.file_name}》整理出 ${payload.cards.length} 张卡片，随机抽到「${drawnCard.title}」。`
-        : `已从《${activeDocument.file_name}》整理出 ${payload.cards.length} 张卡片。`,
-    );
+    setStatus(`已随机抽到「${drawnCard.title}」。`);
+    syncPoolStatus();
+
+    if (pool.length <= CARD_POOL_LOW_WATER) {
+      void fillCardPool(userId, state.activeTemplateKey, { minSize: CARD_POOL_SIZE }).catch(
+        (error) => {
+          setStatus(`卡池补充失败：${error.message}`);
+        },
+      );
+    }
   } catch (error) {
     setStatus(`随机抽卡失败：${error.message}。请先保证当前集合里已经有合适的正文文档。`);
   } finally {
