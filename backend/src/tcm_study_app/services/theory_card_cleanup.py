@@ -7,6 +7,13 @@ _KNOWN_THEORY_TITLES = (
     "针灸治疗作用",
     "针灸治疗原则",
     "针灸处方",
+    "补虚泻实原则",
+    "治病求本原则",
+    "三因制宜原则",
+    "近部选穴",
+    "远部选穴",
+    "辨证选穴",
+    "对证选穴",
     "特定穴的临床应用",
     "五输穴",
     "原穴",
@@ -29,6 +36,18 @@ _KNOWN_THEORY_TITLES = (
     "电针法",
     "治疗特点",
     "临床治法特点",
+)
+_BLOCKED_EXACT = (
+    "背部穴",
+    "经络输穴",
+    "临床应用",
+    "绿色疗法",
+    "发挥自身调节作用",
+    "穿透力强等特点",
+    "面颊及耳前后部位脸穴",
+    "也体现了近部选穴的原则",
+    "在针灸临床上补虚泻实原则",
+    "证选穴原则",
 )
 _BLOCKED_SUBSTRINGS = (
     "针灸学",
@@ -56,6 +75,8 @@ def _looks_like_valid_concept_name(name: str | None) -> bool:
     if not 2 <= len(cleaned) <= 12:
         return False
     if re.search(r"[0-9A-Za-z]", cleaned):
+        return False
+    if cleaned in _BLOCKED_EXACT:
         return False
     if any(token in cleaned for token in _BLOCKED_SUBSTRINGS):
         return False
